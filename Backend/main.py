@@ -6,7 +6,7 @@ import numpy as np
 import json
 
 # Import your model class
-from rhine_meuse_test import Network_model_RM
+from Network_model_RM import Network_model_RM
 
 app = FastAPI(title="Rhine-Meuse Tidal Model API")
 
