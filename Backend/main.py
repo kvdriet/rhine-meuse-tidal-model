@@ -14,9 +14,9 @@ app = FastAPI(title="Rhine-Meuse Tidal Model API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "*",  # Change this to your GitHub Pages URL after deployment
-        # "https://yourusername.github.io",
-        # "http://localhost:8080"
+        "https://kvdriet.github.io",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
     ],
     allow_credentials=True,
     allow_methods=["*"],
