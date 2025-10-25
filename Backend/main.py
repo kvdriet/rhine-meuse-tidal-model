@@ -71,7 +71,7 @@ def complex_to_dict(z):
     return {'real': float(z.real), 'imag': float(z.imag), 
             'amplitude': float(abs(z)), 'phase': float(np.angle(z))}
 
-def process_channel_results(eta, u, x, branch_index=0, reverse_x=False):
+def process_channel_results(eta, u, x, branch_index=0, reverse_x=False, x_offset=0):
     """
     Extract results for a specific channel branch
     
@@ -81,6 +81,7 @@ def process_channel_results(eta, u, x, branch_index=0, reverse_x=False):
     - x: position array
     - branch_index: which branch to extract (for multi-branch arrays)
     - reverse_x: if True, reverse the x-axis (model uses ocean=high_x, reality is opposite)
+    - x_offset: offset to add to x-coordinates for network alignment
     """
     results = []
     
@@ -97,9 +98,12 @@ def process_channel_results(eta, u, x, branch_index=0, reverse_x=False):
                 u_val = u[i, branch_index] if u.ndim > 1 else u[i]
                 x_val = x[i, branch_index] if x.ndim > 1 else x[i]
             
+            # Apply offset for network alignment
+            x_val_adjusted = x_val + x_offset
+            
             results.append({
-                'position': float(x_val),
-                'position_km': float(x_val / 1000),  # Also provide in km
+                'position': float(x_val_adjusted),
+                'position_km': float(x_val_adjusted / 1000),  # Also provide in km
                 'eta': complex_to_dict(eta_val),
                 'velocity': complex_to_dict(u_val)
             })
@@ -211,32 +215,46 @@ def run_tidal_model(params: ModelParameters):
         
         print("Model run complete, processing results...")
         
-        # Extract results for each channel based on network topology
-        # NOTE: In model coordinates, ocean is at high x, river at low x (reversed from reality)
+        # Calculate offsets for network alignment
+        # Ocean channels start at x=0 (after reversal)
+        # Middle channels connect at v3, so offset by ocean length
+        # River/Haringvliet connect at v2, offset by ocean + appropriate middle length
         
-        # River channels (model.eta0_r has 2 branches: [Waal, Haringvliet])
+        L_o_avg = float((model.L_o[0] + model.L_o[1]) / 2)  # Average ocean length
+        L_m_nm = float(model.L_m[1])  # Nieuwe Maas length
+        
+        # Extract results for each channel with proper offsets
+        # River channels (offset to start after middle channels at v1)
         waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                              branch_index=0, reverse_x=True)
+                                              branch_index=0, reverse_x=True, 
+                                              x_offset=L_o_avg + L_m_nm)
+        
+        # Haringvliet should start at v2 position (ocean + NM length)
         haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                                     branch_index=1, reverse_x=True)
+                                                     branch_index=1, reverse_x=True,
+                                                     x_offset=L_o_avg)
         
-        # Middle channels (model.eta0_m has 3 branches)
-        # Correct order from network_model_RM:
-        # - Branch 0: Nieuwe Maas (NM) - connects v2-v3 (ocean connection)
-        # - Branch 1: Nieuwe Merwede (NE) - connects v1-v2
-        # - Branch 2: Oude Maas (OM) - connects v2-v3 (ocean connection)
+        # Middle channels - CORRECT mapping to match YOUR model
+        # eta0_m[:, 0] = Nieuwe Maas (NM) - HIGH amplitude, ocean-connected
+        # eta0_m[:, 1] = Nieuwe Merwede (NE) - LOW amplitude, river side
+        # eta0_m[:, 2] = Oude Maas (OM) - ocean-connected
         nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                      branch_index=0, reverse_x=True)
+                                                      branch_index=0, reverse_x=True,
+                                                      x_offset=L_o_avg)
         nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                         branch_index=1, reverse_x=True)
+                                                         branch_index=1, reverse_x=True,
+                                                         x_offset=L_o_avg)
         oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                    branch_index=2, reverse_x=True)
+                                                    branch_index=2, reverse_x=True,
+                                                    x_offset=L_o_avg)
         
-        # Ocean channels (model.eta0_o has 2 branches: [NW, HK])
+        # Ocean channels (no offset, start at x=0)
         nieuwe_waterweg_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
-                                                          branch_index=0, reverse_x=True)
+                                                          branch_index=0, reverse_x=True,
+                                                          x_offset=0)
         hartelkanaal_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
-                                                       branch_index=1, reverse_x=True)
+                                                       branch_index=1, reverse_x=True,
+                                                       x_offset=0)
         
         # Process results
         results = {
