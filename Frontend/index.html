@@ -31,9 +31,6 @@
             margin-bottom: 15px; 
             border-bottom: 2px solid #38bdf8; 
             padding-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
         
         .control-section { 
@@ -75,13 +72,11 @@
         .scenario-btn:hover { 
             background: rgba(56, 189, 248, 0.3); 
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
         }
         
         .scenario-btn.active { 
             background: #38bdf8; 
             color: #0a0e27;
-            border-color: #38bdf8;
         }
         
         .radio-group { 
@@ -106,14 +101,14 @@
             border-color: rgba(56, 189, 248, 0.3);
         }
         
-        .radio-option input[type="radio"] { 
-            margin-right: 10px; 
-            accent-color: #38bdf8;
-        }
-        
         .radio-option.selected { 
             background: rgba(56, 189, 248, 0.2); 
             border-color: #38bdf8;
+        }
+        
+        .radio-option input[type="radio"] { 
+            margin-right: 10px; 
+            accent-color: #38bdf8;
         }
         
         .slider-container { 
@@ -148,7 +143,6 @@
             background: #38bdf8; 
             border-radius: 50%; 
             cursor: pointer;
-            box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
         }
         
         .run-button { 
@@ -164,16 +158,11 @@
             transition: all 0.3s;
             margin-top: 15px;
             text-transform: uppercase;
-            letter-spacing: 1px;
         }
         
         .run-button:hover { 
             transform: translateY(-2px); 
             box-shadow: 0 8px 20px rgba(56, 189, 248, 0.4);
-        }
-        
-        .run-button:active { 
-            transform: translateY(0);
         }
         
         .run-button.loading {
@@ -232,7 +221,6 @@
             font-size: 14px; 
             margin-bottom: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         
         .legend-item { 
@@ -279,12 +267,15 @@
             to { transform: rotate(360deg); }
         }
         
-        .info-tooltip {
-            position: relative;
-            display: inline-block;
-            color: #38bdf8;
-            cursor: help;
+        .leaflet-popup-content-wrapper { 
+            background: rgba(15, 23, 42, 0.98); 
+            color: #fff; 
+            border-radius: 8px; 
+            border: 1px solid rgba(56, 189, 248, 0.4);
         }
+        .leaflet-popup-content { margin: 10px; font-size: 13px; }
+        .leaflet-popup-content h4 { color: #38bdf8; margin-bottom: 8px; }
+        .leaflet-popup-tip { background: rgba(15, 23, 42, 0.98); }
     </style>
 </head>
 <body>
@@ -295,9 +286,7 @@
     </div>
     
     <div class="control-panel">
-        <h2>
-            🌊 Tidal Model Explorer
-        </h2>
+        <h2>🌊 Tidal Model Explorer</h2>
         
         <div class="control-section">
             <h3>Quick Scenarios</h3>
@@ -413,18 +402,8 @@
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Wait for Leaflet to load
-        (function checkLeaflet() {
-            if (typeof L !== 'undefined') {
-                initializeApp();
-            } else {
-                setTimeout(checkLeaflet, 50);
-            }
-        })();
-        
-        function initializeApp() {
         // API Configuration
-        const API_URL = 'https://rhine-meuse-tidal-model.onrender.com';  // Change to your deployed API URL
+        const API_URL = 'https://rhine-meuse-tidal-model.onrender.com';
         
         var map, channelLayers = [];
         var kmlData = {
@@ -438,6 +417,10 @@
         };
         
         function initMap() {
+            if (typeof L === 'undefined') {
+                setTimeout(initMap, 200);
+                return;
+            }
             map = L.map('map').setView([51.88, 4.85], 10);
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Esri'
@@ -446,7 +429,7 @@
         }
         
         function drawChannels() {
-            const channels = [
+            var channels = [
                 {name: "Nieuwe Waterweg", color: "#00FFFF", weight: 5, coords: kmlData.nieuwewaterweg},
                 {name: "Hartelkanaal", color: "#FF00FF", weight: 5, coords: kmlData.hartelkanaal},
                 {name: "Haringvliet + Hollands Diep", color: "#007cf5", weight: 5, coords: kmlData.haringvliet},
@@ -456,17 +439,18 @@
                 {name: "Waal", color: "#d3322f", weight: 5, coords: kmlData.waal}
             ];
             
-            channels.forEach(ch => {
-                const line = L.polyline(ch.coords, {
+            for (var i = 0; i < channels.length; i++) {
+                var ch = channels[i];
+                var line = L.polyline(ch.coords, {
                     color: ch.color,
                     weight: ch.weight,
                     opacity: 0.8,
                     smoothFactor: 1
                 }).addTo(map);
                 
-                line.bindPopup(`<h4>${ch.name}</h4><p>Click "Run Simulation" to see tidal dynamics</p>`);
+                line.bindPopup('<h4>' + ch.name + '</h4><p>Click "Run Simulation" to see tidal dynamics</p>');
                 channelLayers.push({layer: line, name: ch.name, data: ch});
-            });
+            }
         }
         
         // UI Interactions
@@ -474,11 +458,11 @@
             document.getElementById('depthValue').textContent = e.target.value + ' m';
         });
         
-        document.querySelectorAll('.radio-option').forEach(option => {
+        document.querySelectorAll('.radio-option').forEach(function(option) {
             option.addEventListener('click', function() {
-                const radio = this.querySelector('input[type="radio"]');
+                var radio = this.querySelector('input[type="radio"]');
                 radio.checked = true;
-                this.parentElement.querySelectorAll('.radio-option').forEach(opt => {
+                this.parentElement.querySelectorAll('.radio-option').forEach(function(opt) {
                     opt.classList.remove('selected');
                 });
                 this.classList.add('selected');
@@ -486,37 +470,39 @@
         });
         
         function applyScenario(scenario) {
-            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.scenario-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
             event.target.classList.add('active');
             
-            const presets = {
+            var presets = {
                 'drought': {friction: 'high', depth: -1.5, viscosity: 'high'},
                 'baseline': {friction: 'baseline', depth: 0, viscosity: 'baseline'},
                 'high_flow': {friction: 'low', depth: 1.0, viscosity: 'low'},
                 'dredged': {friction: 'very_low', depth: 2.0, viscosity: 'low'}
             };
             
-            const preset = presets[scenario];
-            document.querySelector(`input[name="friction"][value="${preset.friction}"]`).click();
-            document.querySelector(`input[name="viscosity"][value="${preset.viscosity}"]`).click();
+            var preset = presets[scenario];
+            document.querySelector('input[name="friction"][value="' + preset.friction + '"]').click();
+            document.querySelector('input[name="viscosity"][value="' + preset.viscosity + '"]').click();
             document.getElementById('depthSlider').value = preset.depth;
             document.getElementById('depthValue').textContent = preset.depth + ' m';
         }
         
         async function runModel() {
-            const friction = document.querySelector('input[name="friction"]:checked').value;
-            const viscosity = document.querySelector('input[name="viscosity"]:checked').value;
-            const depth = parseFloat(document.getElementById('depthSlider').value);
+            var friction = document.querySelector('input[name="friction"]:checked').value;
+            var viscosity = document.querySelector('input[name="viscosity"]:checked').value;
+            var depth = parseFloat(document.getElementById('depthSlider').value);
             
-            const button = document.querySelector('.run-button');
-            const overlay = document.getElementById('loadingOverlay');
+            var button = document.querySelector('.run-button');
+            var overlay = document.getElementById('loadingOverlay');
             
             button.classList.add('loading');
             button.textContent = '⏳ Running...';
             overlay.classList.add('active');
             
             try {
-                const response = await fetch(`${API_URL}/run_model`, {
+                var response = await fetch(API_URL + '/run_model', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -528,13 +514,13 @@
                 
                 if (!response.ok) throw new Error('Model run failed');
                 
-                const results = await response.json();
+                var results = await response.json();
                 displayResults(results);
                 visualizeOnMap(results);
                 
             } catch (error) {
                 console.error('Error:', error);
-                alert('Could not connect to model API. Make sure the backend is running at ' + API_URL);
+                alert('Could not connect to model API. The backend might be waking up (takes ~30 seconds on first request). Please try again.');
             } finally {
                 button.classList.remove('loading');
                 button.textContent = '⚡ Run Simulation';
@@ -550,8 +536,7 @@
             document.getElementById('resultsPanel').classList.add('visible');
         }
         
-        // Channel name mapping for API results
-        const channelMapping = {
+        var channelMapping = {
             'Nieuwe Waterweg': 'nieuwe_waterweg',
             'Hartelkanaal': 'hartelkanaal',
             'Haringvliet + Hollands Diep': 'haringvliet',
@@ -562,25 +547,22 @@
         };
         
         function visualizeOnMap(results) {
-            // Update channel line weights based on amplitude
-            channelLayers.forEach(ch => {
-                const apiName = channelMapping[ch.name];
+            channelLayers.forEach(function(ch) {
+                var apiName = channelMapping[ch.name];
                 
                 if (apiName && results.channels[apiName]) {
-                    const channelData = results.channels[apiName];
-                    const avgAmplitude = channelData.reduce((sum, pt) => 
-                        sum + pt.eta.amplitude, 0) / channelData.length;
+                    var channelData = results.channels[apiName];
+                    var avgAmplitude = channelData.reduce(function(sum, pt) {
+                        return sum + pt.eta.amplitude;
+                    }, 0) / channelData.length;
                     
-                    // Get max and min amplitudes for context
-                    const maxAmp = Math.max(...channelData.map(pt => pt.eta.amplitude));
-                    const minAmp = Math.min(...channelData.map(pt => pt.eta.amplitude));
+                    var maxAmp = Math.max.apply(Math, channelData.map(function(pt) { return pt.eta.amplitude; }));
+                    var minAmp = Math.min.apply(Math, channelData.map(function(pt) { return pt.eta.amplitude; }));
                     
-                    // Scale line weight based on amplitude (thicker = larger tides)
-                    const newWeight = 3 + (avgAmplitude * 8);
+                    var newWeight = 3 + (avgAmplitude * 8);
                     ch.layer.setStyle({weight: newWeight, opacity: 0.9});
                     
-                    // Determine channel type
-                    let channelType = 'Unknown';
+                    var channelType = 'Unknown';
                     if (apiName === 'waal' || apiName === 'haringvliet') {
                         channelType = apiName === 'haringvliet' ? 'River-like (Closed)' : 'River';
                     } else if (apiName.includes('maas') || apiName === 'nieuwe_merwede') {
@@ -589,36 +571,21 @@
                         channelType = 'Ocean';
                     }
                     
-                    // Update popup with detailed results
-                    const popupContent = `
-                        <h4>${ch.name}</h4>
-                        <p><strong>Type:</strong> ${channelType}</p>
-                        <p><strong>Avg Amplitude:</strong> ${avgAmplitude.toFixed(3)} m</p>
-                        <p><strong>Tidal Range:</strong> ${(avgAmplitude * 2).toFixed(3)} m</p>
-                        <p><strong>Max Amplitude:</strong> ${maxAmp.toFixed(3)} m</p>
-                        <p><strong>Min Amplitude:</strong> ${minAmp.toFixed(3)} m</p>
-                        <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
-                            ${apiName === 'haringvliet' ? '⚠️ Closed channel: tide dampening behavior' : ''}
-                        </p>
-                    `;
+                    var popupContent = '<h4>' + ch.name + '</h4>' +
+                        '<p><strong>Type:</strong> ' + channelType + '</p>' +
+                        '<p><strong>Avg Amplitude:</strong> ' + avgAmplitude.toFixed(3) + ' m</p>' +
+                        '<p><strong>Tidal Range:</strong> ' + (avgAmplitude * 2).toFixed(3) + ' m</p>' +
+                        '<p><strong>Max Amplitude:</strong> ' + maxAmp.toFixed(3) + ' m</p>' +
+                        '<p><strong>Min Amplitude:</strong> ' + minAmp.toFixed(3) + ' m</p>' +
+                        (apiName === 'haringvliet' ? '<p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">⚠️ Closed channel: tide dampening behavior</p>' : '');
+                    
                     ch.layer.setPopupContent(popupContent);
                 }
             });
-            
-            // Add visual indicators at vertices
-            if (results.vertices) {
-                const vertexInfo = `
-                    <h4>Network Junctions</h4>
-                    <p><strong>v1:</strong> ${results.vertices.v1.amplitude.toFixed(3)} m</p>
-                    <p><strong>v2:</strong> ${results.vertices.v2.amplitude.toFixed(3)} m</p>
-                    <p><strong>v3:</strong> ${results.vertices.v3.amplitude.toFixed(3)} m</p>
-                `;
-                console.log('Vertex amplitudes:', vertexInfo);
-            }
         }
         
-        // Initialize map after Leaflet is fully loaded
-        } // End of initializeApp function
+        // Initialize map
+        setTimeout(initMap, 100);
     </script>
 </body>
 </html>
