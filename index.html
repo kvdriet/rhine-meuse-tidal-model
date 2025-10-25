@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rhine-Meuse Tidal Model - Interactive Explorer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e27; color: #fff; overflow: hidden; }
+        #map { width: 100%; height: 100vh; }
+        
+        .control-panel { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            background: rgba(15, 23, 42, 0.97); 
+            padding: 20px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); 
+            z-index: 1000; 
+            max-width: 380px; 
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        
+        .control-panel h2 { 
+            color: #38bdf8; 
+            font-size: 20px; 
+            margin-bottom: 15px; 
+            border-bottom: 2px solid #38bdf8; 
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .control-section { 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            background: rgba(30, 41, 59, 0.5); 
+            border-radius: 8px;
+            border-left: 3px solid #38bdf8;
+        }
+        
+        .control-section h3 { 
+            color: #38bdf8; 
+            font-size: 14px; 
+            margin-bottom: 12px; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .scenario-buttons { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 8px; 
+            margin-top: 10px;
+        }
+        
+        .scenario-btn { 
+            background: rgba(56, 189, 248, 0.15); 
+            color: #38bdf8; 
+            border: 1px solid rgba(56, 189, 248, 0.3); 
+            padding: 10px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            font-size: 13px; 
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .scenario-btn:hover { 
+            background: rgba(56, 189, 248, 0.3); 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+        }
+        
+        .scenario-btn.active { 
+            background: #38bdf8; 
+            color: #0a0e27;
+            border-color: #38bdf8;
+        }
+        
+        .radio-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px;
+        }
+        
+        .radio-option { 
+            display: flex; 
+            align-items: center; 
+            padding: 10px; 
+            background: rgba(30, 41, 59, 0.6); 
+            border-radius: 6px; 
+            cursor: pointer; 
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        
+        .radio-option:hover { 
+            background: rgba(56, 189, 248, 0.1); 
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+        
+        .radio-option input[type="radio"] { 
+            margin-right: 10px; 
+            accent-color: #38bdf8;
+        }
+        
+        .radio-option.selected { 
+            background: rgba(56, 189, 248, 0.2); 
+            border-color: #38bdf8;
+        }
+        
+        .slider-container { 
+            margin-top: 12px;
+        }
+        
+        .slider-label { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-bottom: 8px; 
+            font-size: 13px; 
+            color: #cbd5e1;
+        }
+        
+        .slider-value { 
+            color: #38bdf8; 
+            font-weight: 600;
+        }
+        
+        input[type="range"] { 
+            width: 100%; 
+            height: 6px; 
+            background: rgba(56, 189, 248, 0.2); 
+            border-radius: 3px; 
+            outline: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb { 
+            appearance: none; 
+            width: 18px; 
+            height: 18px; 
+            background: #38bdf8; 
+            border-radius: 50%; 
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
+        }
+        
+        .run-button { 
+            width: 100%; 
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9); 
+            color: #0a0e27; 
+            border: none; 
+            padding: 14px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: 700; 
+            font-size: 15px; 
+            transition: all 0.3s;
+            margin-top: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .run-button:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 8px 20px rgba(56, 189, 248, 0.4);
+        }
+        
+        .run-button:active { 
+            transform: translateY(0);
+        }
+        
+        .run-button.loading {
+            background: linear-gradient(135deg, #64748b, #475569);
+            cursor: not-allowed;
+        }
+        
+        .results-panel { 
+            position: absolute; 
+            bottom: 20px; 
+            left: 20px; 
+            background: rgba(15, 23, 42, 0.97); 
+            padding: 20px; 
+            border-radius: 12px; 
+            z-index: 1000; 
+            min-width: 350px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: none;
+        }
+        
+        .results-panel.visible { display: block; }
+        
+        .results-panel h3 { 
+            color: #38bdf8; 
+            font-size: 16px; 
+            margin-bottom: 12px;
+        }
+        
+        .result-item { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 8px 0; 
+            border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+            font-size: 13px;
+        }
+        
+        .result-label { color: #cbd5e1; }
+        .result-value { 
+            color: #38bdf8; 
+            font-weight: 600;
+        }
+        
+        .legend { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(15, 23, 42, 0.97); 
+            padding: 15px; 
+            border-radius: 10px; 
+            z-index: 1000; 
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+        
+        .legend h3 { 
+            color: #38bdf8; 
+            font-size: 14px; 
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .legend-item { 
+            display: flex; 
+            align-items: center; 
+            margin: 6px 0; 
+            font-size: 12px;
+        }
+        
+        .legend-color { 
+            width: 30px; 
+            height: 4px; 
+            margin-right: 10px; 
+            border-radius: 2px;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 14, 39, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        .loading-overlay.active {
+            display: flex;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(56, 189, 248, 0.2);
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .info-tooltip {
+            position: relative;
+            display: inline-block;
+            color: #38bdf8;
+            cursor: help;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+    
+    <div class="control-panel">
+        <h2>
+            🌊 Tidal Model Explorer
+        </h2>
+        
+        <div class="control-section">
+            <h3>Quick Scenarios</h3>
+            <div class="scenario-buttons">
+                <button class="scenario-btn" onclick="applyScenario('drought')">🏜️ Drought</button>
+                <button class="scenario-btn active" onclick="applyScenario('baseline')">📊 Baseline</button>
+                <button class="scenario-btn" onclick="applyScenario('high_flow')">🌊 High Flow</button>
+                <button class="scenario-btn" onclick="applyScenario('dredged')">⚒️ Dredged</button>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3>Friction Conditions</h3>
+            <div class="radio-group" id="frictionGroup">
+                <label class="radio-option">
+                    <input type="radio" name="friction" value="very_low">
+                    <span>Very Low (Smooth bed)</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="friction" value="low">
+                    <span>Low (Clean channel)</span>
+                </label>
+                <label class="radio-option selected">
+                    <input type="radio" name="friction" value="baseline" checked>
+                    <span>Baseline (Current)</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="friction" value="high">
+                    <span>High (Moderate vegetation)</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="friction" value="very_high">
+                    <span>Very High (Dense vegetation)</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3>Channel Depth</h3>
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>Depth Adjustment</span>
+                    <span class="slider-value" id="depthValue">0.0 m</span>
+                </div>
+                <input type="range" id="depthSlider" min="-2" max="2" step="0.1" value="0">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-top: 4px;">
+                    <span>-2m</span>
+                    <span>Baseline</span>
+                    <span>+2m</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3>Eddy Viscosity</h3>
+            <div class="radio-group" id="viscosityGroup">
+                <label class="radio-option">
+                    <input type="radio" name="viscosity" value="very_low">
+                    <span>Very Low</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="viscosity" value="low">
+                    <span>Low</span>
+                </label>
+                <label class="radio-option selected">
+                    <input type="radio" name="viscosity" value="baseline" checked>
+                    <span>Baseline</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="viscosity" value="high">
+                    <span>High</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="viscosity" value="very_high">
+                    <span>Very High</span>
+                </label>
+            </div>
+        </div>
+        
+        <button class="run-button" onclick="runModel()">⚡ Run Simulation</button>
+    </div>
+    
+    <div class="results-panel" id="resultsPanel">
+        <h3>📊 Simulation Results</h3>
+        <div class="result-item">
+            <span class="result-label">Max Amplitude:</span>
+            <span class="result-value" id="maxAmp">-</span>
+        </div>
+        <div class="result-item">
+            <span class="result-label">Phase Lag:</span>
+            <span class="result-value" id="phaseLag">-</span>
+        </div>
+        <div class="result-item">
+            <span class="result-label">Friction Coef:</span>
+            <span class="result-value" id="frictionVal">-</span>
+        </div>
+        <div class="result-item">
+            <span class="result-label">Viscosity:</span>
+            <span class="result-value" id="viscosityVal">-</span>
+        </div>
+    </div>
+    
+    <div class="legend">
+        <h3>Channels</h3>
+        <div class="legend-item"><div class="legend-color" style="background: #d3322f;"></div><span>Waal</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #19d276;"></div><span>Oude Maas</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #173f5f;"></div><span>Nieuwe Maas</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #f6d55c;"></div><span>N. Merwede</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #007cf5;"></div><span>Haringvliet</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #00FFFF;"></div><span>N. Waterweg</span></div>
+        <div class="legend-item"><div class="legend-color" style="background: #FF00FF;"></div><span>Hartelkanaal</span></div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Wait for Leaflet to load
+        (function checkLeaflet() {
+            if (typeof L !== 'undefined') {
+                initializeApp();
+            } else {
+                setTimeout(checkLeaflet, 50);
+            }
+        })();
+        
+        function initializeApp() {
+        // API Configuration
+        const API_URL = 'https://rhine-meuse-tidal-model.onrender.com';  // Change to your deployed API URL
+        
+        var map, channelLayers = [];
+        var kmlData = {
+            nieuwewaterweg: [[51.97316,4.12693],[51.96862,4.13491],[51.96462,4.14227],[51.96080,4.15245],[51.95522,4.16379],[51.94896,4.17568],[51.94373,4.18757],[51.93833,4.20143],[51.93346,4.21331],[51.92788,4.22519],[51.92126,4.23057],[51.91707,4.23509],[51.91306,4.24555],[51.90958,4.25600],[51.90505,4.26673],[51.90157,4.27749],[51.89913,4.28850],[51.89722,4.30009],[51.89426,4.31365],[51.89218,4.32177]],
+            hartelkanaal: [[51.93985,4.08370],[51.93901,4.09486],[51.93807,4.10328],[51.93685,4.11273],[51.93545,4.12188],[51.93422,4.13075],[51.93328,4.14144],[51.93206,4.15028],[51.93018,4.15807],[51.92764,4.16585],[51.92529,4.16982],[51.92247,4.17195],[51.91917,4.17623],[51.91531,4.18339],[51.91353,4.18720],[51.91071,4.19315],[51.90760,4.20092],[51.90549,4.20499],[51.90352,4.20862],[51.90187,4.21233],[51.89920,4.21716],[51.89680,4.22019],[51.89473,4.22337],[51.89234,4.22518],[51.88967,4.22751],[51.88579,4.23053],[51.88318,4.23174],[51.87998,4.23329],[51.87753,4.23519],[51.87455,4.23821],[51.87269,4.24184],[51.87120,4.24589],[51.86986,4.25037],[51.86843,4.25443],[51.86720,4.25797],[51.86630,4.26159],[51.86544,4.26694],[51.86539,4.27220],[51.86582,4.27745],[51.86582,4.28228],[51.86598,4.28668],[51.86582,4.29185],[51.86544,4.29755],[51.86544,4.30195],[51.86571,4.30738],[51.86576,4.31144],[51.86566,4.31652],[51.86592,4.32212],[51.86619,4.32834],[51.86618,4.33442]],
+            haringvliet: [[51.83471,4.05265],[51.83011,4.06346],[51.82429,4.07745],[51.81762,4.09651],[51.81190,4.11652],[51.80521,4.13839],[51.79717,4.16025],[51.78718,4.18072],[51.77869,4.20159],[51.76518,4.22699],[51.75459,4.24509],[51.73961,4.26397],[51.73079,4.28331],[51.72241,4.30565],[51.71781,4.33924],[51.71634,4.36224],[51.71499,4.38897],[51.71157,4.41551],[51.70667,4.44106],[51.70110,4.46696],[51.69600,4.49849],[51.69425,4.53106],[51.69619,4.55130],[51.70008,4.56841],[51.70486,4.59595],[51.70947,4.60896],[51.71575,4.62143]],
+            nieuwemaas: [[51.89209,4.32187],[51.89380,4.32835],[51.89418,4.33520],[51.89674,4.34590],[51.89902,4.35561],[51.89913,4.36522],[51.89750,4.37630],[51.89632,4.38822],[51.89622,4.39768],[51.89855,4.40700],[51.90073,4.41470],[51.90273,4.42625],[51.90159,4.43896],[51.90040,4.45045],[51.89931,4.46131],[51.90101,4.47163],[51.90496,4.48033],[51.91026,4.48776],[51.91477,4.49363],[51.91745,4.50393],[51.91562,4.51219],[51.91209,4.51598],[51.90751,4.51706],[51.90416,4.51786],[51.90078,4.52200],[51.90061,4.53182],[51.90241,4.53584],[51.90522,4.54653],[51.90555,4.55622],[51.90372,4.56747],[51.90394,4.57470],[51.90119,4.58182],[51.89637,4.59176],[51.89373,4.59746],[51.89091,4.61482],[51.88827,4.62068],[51.88378,4.62671],[51.87479,4.63203],[51.86863,4.63756],[51.86425,4.64520],[51.86162,4.64804],[51.85747,4.65371],[51.84987,4.65914],[51.84467,4.66732],[51.83895,4.67445],[51.83397,4.67376],[51.82816,4.67122],[51.82337,4.67065],[51.82025,4.67396],[51.82049,4.68288],[51.82148,4.68902],[51.82262,4.69869],[51.82238,4.70941],[51.82212,4.72051],[51.82229,4.73562],[51.82100,4.75208],[51.81631,4.76278],[51.81394,4.77286],[51.81449,4.78377],[51.81581,4.79493],[51.81744,4.80405],[51.81841,4.81244],[51.81936,4.82489],[51.81740,4.83700],[51.81816,4.85183],[51.81728,4.86890],[51.81798,4.88421]],
+            nm: [[51.71568,4.62141],[51.71607,4.63090],[51.71673,4.63873],[51.71857,4.64978],[51.72274,4.66841],[51.72687,4.67884],[51.72957,4.68926],[51.73371,4.69908],[51.73900,4.70914],[51.74442,4.71826],[51.74816,4.72480],[51.75375,4.73244],[51.75906,4.74052],[51.76420,4.74604],[51.77039,4.74908],[51.77525,4.75052],[51.78018,4.75384],[51.78464,4.75940],[51.78875,4.76664],[51.79306,4.77499],[51.79614,4.78467],[51.79871,4.79426],[51.79923,4.80405],[51.79883,4.81565],[51.79783,4.82468],[51.79748,4.83094],[51.79789,4.83942],[51.79897,4.84680],[51.80147,4.85453],[51.80389,4.86221],[51.80738,4.86837],[51.81130,4.87558],[51.81456,4.88049],[51.81625,4.88313],[51.81784,4.88389]],
+            oudemaas: [[51.89210,4.32194],[51.89011,4.32261],[51.88798,4.32358],[51.88481,4.32503],[51.88256,4.32599],[51.88036,4.32710],[51.87811,4.32822],[51.87601,4.32916],[51.87261,4.33094],[51.86937,4.33284],[51.86641,4.33423],[51.86543,4.33486],[51.86195,4.33793],[51.85921,4.34032],[51.85679,4.34326],[51.85322,4.34690],[51.85030,4.35107],[51.84858,4.35513],[51.84645,4.36043],[51.84489,4.36584],[51.84367,4.37132],[51.84265,4.37879],[51.84209,4.38462],[51.84207,4.39111],[51.84259,4.39745],[51.84296,4.40263],[51.84301,4.41042],[51.84213,4.41809],[51.84050,4.42365],[51.83889,4.42752],[51.83703,4.43152],[51.83555,4.43635],[51.83279,4.44515],[51.83204,4.45401],[51.83205,4.45951],[51.83254,4.46417],[51.83338,4.47162],[51.83518,4.47896],[51.83573,4.48558],[51.83601,4.49480],[51.83533,4.49922],[51.83406,4.50639],[51.83241,4.51397],[51.83055,4.51978],[51.82998,4.52565],[51.83053,4.53299],[51.83185,4.53856],[51.83234,4.54454],[51.83127,4.55025],[51.82825,4.55552],[51.82414,4.55950],[51.82122,4.56017],[51.81856,4.56180],[51.81510,4.56504],[51.81303,4.56915],[51.81098,4.57363],[51.80878,4.57813],[51.80760,4.58372],[51.80700,4.59014],[51.80619,4.59574],[51.80544,4.60211],[51.80393,4.60903],[51.80201,4.61527],[51.80044,4.61991],[51.79699,4.62285],[51.79214,4.62361],[51.78721,4.62579],[51.78495,4.62777],[51.78095,4.62821],[51.77710,4.62816],[51.77280,4.62711],[51.76855,4.62683],[51.76449,4.62645],[51.76049,4.62721],[51.75496,4.62841],[51.74952,4.63068],[51.74579,4.63123],[51.73807,4.62959],[51.73707,4.62941],[51.73529,4.62896],[51.73256,4.62817],[51.72982,4.62740],[51.72531,4.62500],[51.72154,4.62312],[51.71569,4.62125]],
+            waal: [[51.81776,4.88379],[51.82333,4.89993],[51.82547,4.90975],[51.82795,4.92134],[51.82845,4.93123],[51.82768,4.94449],[51.82510,4.95977],[51.82338,4.97491],[51.82147,4.99522],[51.82104,5.01281],[51.81860,5.02884],[51.81764,5.03890],[51.81847,5.05025],[51.82041,5.05911],[51.82381,5.06837],[51.82670,5.08053],[51.82641,5.08814],[51.82597,5.09570],[51.82464,5.10233],[51.82233,5.10822],[51.81900,5.11451],[51.81748,5.12137],[51.81625,5.12654],[51.81453,5.13259],[51.81392,5.14302],[51.81486,5.15129],[51.81513,5.15689],[51.81609,5.16659],[51.81623,5.17366],[51.81530,5.17985],[51.81423,5.18673],[51.81311,5.19079],[51.81136,5.19814],[51.81073,5.20827],[51.81106,5.21754],[51.81196,5.22445],[51.81330,5.23354],[51.81566,5.24081],[51.81781,5.25525],[51.81843,5.26654],[51.82089,5.27815],[51.82253,5.29076],[51.82395,5.29906],[51.82269,5.31233],[51.82062,5.32227],[51.81424,5.33052],[51.81012,5.33680],[51.80477,5.34572],[51.80474,5.35899],[51.80758,5.36863],[51.81495,5.37498],[51.82007,5.37834],[51.82722,5.38407],[51.83190,5.39076],[51.83616,5.39941],[51.84330,5.40950],[51.84821,5.41288],[51.85661,5.41499],[51.86192,5.42105],[51.86929,5.42582],[51.87728,5.43159],[51.88234,5.44530],[51.88744,5.45470],[51.89061,5.47705],[51.89053,5.49270],[51.89014,5.50352],[51.89131,5.51446],[51.89276,5.52464],[51.89516,5.53331],[51.89655,5.53894],[51.89847,5.54929],[51.90095,5.56146],[51.90203,5.57212],[51.90056,5.58423],[51.89985,5.59622],[51.89979,5.60822],[51.89946,5.61854],[51.89989,5.62834],[51.89863,5.63971],[51.89793,5.65048],[51.89638,5.66108],[51.89605,5.67352],[51.89694,5.68279],[51.89632,5.69507],[51.89347,5.70428],[51.89156,5.71245],[51.88720,5.72633],[51.88545,5.74147],[51.88316,5.75342],[51.88057,5.76764],[51.87787,5.78443],[51.87688,5.79639],[51.87429,5.80968],[51.86916,5.81767],[51.86611,5.82735],[51.86309,5.83353],[51.85894,5.83925],[51.85648,5.84543],[51.85336,5.85349],[51.85133,5.86462],[51.85259,5.87479],[51.85547,5.87983],[51.85959,5.88141],[51.86537,5.88772],[51.86966,5.89386],[51.87270,5.90469],[51.87378,5.91443],[51.87500,5.92428],[51.87331,5.93421],[51.86907,5.94129],[51.86539,5.94466],[51.86010,5.95121],[51.85744,5.95538],[51.85486,5.96231],[51.85384,5.96936],[51.85587,5.97582],[51.85908,5.97959],[51.86337,5.98447],[51.86755,5.98797],[51.87305,5.99241],[51.87627,5.99362],[51.87903,5.99830],[51.88068,6.00236],[51.88167,6.01200],[51.88058,6.01895],[51.87705,6.02798],[51.87449,6.03217],[51.87255,6.03656],[51.87207,6.04261],[51.87207,6.05061],[51.86991,6.05647],[51.86552,6.06313]]
+        };
+        
+        function initMap() {
+            map = L.map('map').setView([51.88, 4.85], 10);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Esri'
+            }).addTo(map);
+            drawChannels();
+        }
+        
+        function drawChannels() {
+            const channels = [
+                {name: "Nieuwe Waterweg", color: "#00FFFF", weight: 5, coords: kmlData.nieuwewaterweg},
+                {name: "Hartelkanaal", color: "#FF00FF", weight: 5, coords: kmlData.hartelkanaal},
+                {name: "Haringvliet + Hollands Diep", color: "#007cf5", weight: 5, coords: kmlData.haringvliet},
+                {name: "Nieuwe Maas", color: "#173f5f", weight: 5, coords: kmlData.nieuwemaas},
+                {name: "Nieuwe Merwede", color: "#f6d55c", weight: 5, coords: kmlData.nm},
+                {name: "Oude Maas + Dordtsche Kil", color: "#19d276", weight: 5, coords: kmlData.oudemaas},
+                {name: "Waal", color: "#d3322f", weight: 5, coords: kmlData.waal}
+            ];
+            
+            channels.forEach(ch => {
+                const line = L.polyline(ch.coords, {
+                    color: ch.color,
+                    weight: ch.weight,
+                    opacity: 0.8,
+                    smoothFactor: 1
+                }).addTo(map);
+                
+                line.bindPopup(`<h4>${ch.name}</h4><p>Click "Run Simulation" to see tidal dynamics</p>`);
+                channelLayers.push({layer: line, name: ch.name, data: ch});
+            });
+        }
+        
+        // UI Interactions
+        document.getElementById('depthSlider').addEventListener('input', function(e) {
+            document.getElementById('depthValue').textContent = e.target.value + ' m';
+        });
+        
+        document.querySelectorAll('.radio-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const radio = this.querySelector('input[type="radio"]');
+                radio.checked = true;
+                this.parentElement.querySelectorAll('.radio-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                this.classList.add('selected');
+            });
+        });
+        
+        function applyScenario(scenario) {
+            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const presets = {
+                'drought': {friction: 'high', depth: -1.5, viscosity: 'high'},
+                'baseline': {friction: 'baseline', depth: 0, viscosity: 'baseline'},
+                'high_flow': {friction: 'low', depth: 1.0, viscosity: 'low'},
+                'dredged': {friction: 'very_low', depth: 2.0, viscosity: 'low'}
+            };
+            
+            const preset = presets[scenario];
+            document.querySelector(`input[name="friction"][value="${preset.friction}"]`).click();
+            document.querySelector(`input[name="viscosity"][value="${preset.viscosity}"]`).click();
+            document.getElementById('depthSlider').value = preset.depth;
+            document.getElementById('depthValue').textContent = preset.depth + ' m';
+        }
+        
+        async function runModel() {
+            const friction = document.querySelector('input[name="friction"]:checked').value;
+            const viscosity = document.querySelector('input[name="viscosity"]:checked').value;
+            const depth = parseFloat(document.getElementById('depthSlider').value);
+            
+            const button = document.querySelector('.run-button');
+            const overlay = document.getElementById('loadingOverlay');
+            
+            button.classList.add('loading');
+            button.textContent = '⏳ Running...';
+            overlay.classList.add('active');
+            
+            try {
+                const response = await fetch(`${API_URL}/run_model`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        friction_level: friction,
+                        depth_adjustment: depth,
+                        viscosity_level: viscosity
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Model run failed');
+                
+                const results = await response.json();
+                displayResults(results);
+                visualizeOnMap(results);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Could not connect to model API. Make sure the backend is running at ' + API_URL);
+            } finally {
+                button.classList.remove('loading');
+                button.textContent = '⚡ Run Simulation';
+                overlay.classList.remove('active');
+            }
+        }
+        
+        function displayResults(results) {
+            document.getElementById('maxAmp').textContent = results.max_amplitude.toFixed(3) + ' m';
+            document.getElementById('phaseLag').textContent = (results.phase_lag * 180 / Math.PI).toFixed(1) + '°';
+            document.getElementById('frictionVal').textContent = results.parameters_used.Sf.toFixed(4);
+            document.getElementById('viscosityVal').textContent = results.parameters_used.Av.toFixed(4);
+            document.getElementById('resultsPanel').classList.add('visible');
+        }
+        
+        // Channel name mapping for API results
+        const channelMapping = {
+            'Nieuwe Waterweg': 'nieuwe_waterweg',
+            'Hartelkanaal': 'hartelkanaal',
+            'Haringvliet + Hollands Diep': 'haringvliet',
+            'Nieuwe Maas': 'nieuwe_maas',
+            'Nieuwe Merwede': 'nieuwe_merwede',
+            'Oude Maas + Dordtsche Kil': 'oude_maas',
+            'Waal': 'waal'
+        };
+        
+        function visualizeOnMap(results) {
+            // Update channel line weights based on amplitude
+            channelLayers.forEach(ch => {
+                const apiName = channelMapping[ch.name];
+                
+                if (apiName && results.channels[apiName]) {
+                    const channelData = results.channels[apiName];
+                    const avgAmplitude = channelData.reduce((sum, pt) => 
+                        sum + pt.eta.amplitude, 0) / channelData.length;
+                    
+                    // Get max and min amplitudes for context
+                    const maxAmp = Math.max(...channelData.map(pt => pt.eta.amplitude));
+                    const minAmp = Math.min(...channelData.map(pt => pt.eta.amplitude));
+                    
+                    // Scale line weight based on amplitude (thicker = larger tides)
+                    const newWeight = 3 + (avgAmplitude * 8);
+                    ch.layer.setStyle({weight: newWeight, opacity: 0.9});
+                    
+                    // Determine channel type
+                    let channelType = 'Unknown';
+                    if (apiName === 'waal' || apiName === 'haringvliet') {
+                        channelType = apiName === 'haringvliet' ? 'River-like (Closed)' : 'River';
+                    } else if (apiName.includes('maas') || apiName === 'nieuwe_merwede') {
+                        channelType = 'Middle';
+                    } else {
+                        channelType = 'Ocean';
+                    }
+                    
+                    // Update popup with detailed results
+                    const popupContent = `
+                        <h4>${ch.name}</h4>
+                        <p><strong>Type:</strong> ${channelType}</p>
+                        <p><strong>Avg Amplitude:</strong> ${avgAmplitude.toFixed(3)} m</p>
+                        <p><strong>Tidal Range:</strong> ${(avgAmplitude * 2).toFixed(3)} m</p>
+                        <p><strong>Max Amplitude:</strong> ${maxAmp.toFixed(3)} m</p>
+                        <p><strong>Min Amplitude:</strong> ${minAmp.toFixed(3)} m</p>
+                        <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
+                            ${apiName === 'haringvliet' ? '⚠️ Closed channel: tide dampening behavior' : ''}
+                        </p>
+                    `;
+                    ch.layer.setPopupContent(popupContent);
+                }
+            });
+            
+            // Add visual indicators at vertices
+            if (results.vertices) {
+                const vertexInfo = `
+                    <h4>Network Junctions</h4>
+                    <p><strong>v1:</strong> ${results.vertices.v1.amplitude.toFixed(3)} m</p>
+                    <p><strong>v2:</strong> ${results.vertices.v2.amplitude.toFixed(3)} m</p>
+                    <p><strong>v3:</strong> ${results.vertices.v3.amplitude.toFixed(3)} m</p>
+                `;
+                console.log('Vertex amplitudes:', vertexInfo);
+            }
+        }
+        
+        // Initialize map after Leaflet is fully loaded
+        } // End of initializeApp function
+    </script>
+</body>
+</html>
