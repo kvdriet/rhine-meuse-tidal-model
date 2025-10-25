@@ -6,7 +6,7 @@ import numpy as np
 import json
 
 # Import your model class
-from network_model_RM import Network_model_RM
+from rhine_meuse_test import Network_model_RM
 
 app = FastAPI(title="Rhine-Meuse Tidal Model API")
 
@@ -14,9 +14,9 @@ app = FastAPI(title="Rhine-Meuse Tidal Model API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://kvdriet.github.io",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
+        "*",  # Change this to your GitHub Pages URL after deployment
+        # "https://yourusername.github.io",
+        # "http://localhost:8080"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -42,7 +42,7 @@ class TidalResults(BaseModel):
 FRICTION_MAPPING = {
     'very_low': 0.002,   # Smooth bed, low vegetation
     'low': 0.003,        # Clean channel
-    'baseline': 0.005,   # Current conditions
+    'baseline': 0.0047272727272727275,   # Current conditions (calibrated)
     'high': 0.007,       # Moderate vegetation
     'very_high': 0.010   # Dense vegetation/obstacles
 }
@@ -50,14 +50,14 @@ FRICTION_MAPPING = {
 VISCOSITY_MAPPING = {
     'very_low': 0.002,
     'low': 0.003,
-    'baseline': 0.005,
+    'baseline': 0.0059191919191919195,   # Current conditions (calibrated)
     'high': 0.007,
     'very_high': 0.010
 }
 
 SCENARIO_PRESETS = {
     'drought': {'Sf': 0.007, 'Av': 0.006, 'depth_adj': -1.5},
-    'baseline': {'Sf': 0.005, 'Av': 0.005, 'depth_adj': 0.0},
+    'baseline': {'Sf': 0.0047272727272727275, 'Av': 0.0059191919191919195, 'depth_adj': 0.0},
     'high_flow': {'Sf': 0.004, 'Av': 0.004, 'depth_adj': +1.0},
     'dredged': {'Sf': 0.003, 'Av': 0.004, 'depth_adj': +2.0}
 }
@@ -166,15 +166,20 @@ def run_tidal_model(params: ModelParameters):
     Run the Rhine-Meuse tidal model with specified parameters
     
     Network topology:
-    - River: Waal (WL, branch 0)
-    - River-like (closed): Haringvliet (HV, branch 1 - branches from Oude Maas at v2)
-    - Middle: Oude Maas (OM, branch 0), Nieuwe Maas (NM, branch 1), Nieuwe Merwede (NE, branch 2)
-    - Ocean: Nieuwe Waterweg (NW, branch 0), Hartelkanaal (HK, branch 1)
+    - River: Waal (WL, branch 0 of eta0_r)
+    - River-like (closed): Haringvliet (HV, branch 1 of eta0_r - branches from v2)
+    - Middle: 
+      * Nieuwe Maas (NM, branch 0 of eta0_m) - connects v2-v3 (ocean)
+      * Nieuwe Merwede (NE, branch 1 of eta0_m) - connects v1-v2
+      * Oude Maas (OM, branch 2 of eta0_m) - connects v2-v3 (ocean)
+    - Ocean: 
+      * Nieuwe Waterweg (NW, branch 0 of eta0_o)
+      * Hartelkanaal (HK, branch 1 of eta0_o)
     
     Vertices:
-    - v1: Waal - Nieuwe Maas - Nieuwe Merwede junction
-    - v2: Oude Maas - Nieuwe Merwede - Haringvliet junction
-    - v3: Nieuwe Waterweg - Hartelkanaal - Nieuwe Maas - Oude Maas junction
+    - v1: Waal (WL) - Nieuwe Merwede (NE) junction
+    - v2: Nieuwe Maas (NM) - Nieuwe Merwede (NE) - Oude Maas (OM) - Haringvliet (HV) junction
+    - v3: Nieuwe Waterweg (NW) - Hartelkanaal (HK) - Nieuwe Maas (NM) - Oude Maas (OM) junction
     
     Note: Model x-axis is reversed (ocean at high x, river at low x)
     """
@@ -215,13 +220,17 @@ def run_tidal_model(params: ModelParameters):
         haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
                                                      branch_index=1, reverse_x=True)
         
-        # Middle channels (model.eta0_m has 3 branches: [OM, NM, NE])
-        oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                    branch_index=0, reverse_x=True)
+        # Middle channels (model.eta0_m has 3 branches)
+        # Correct order from network_model_RM:
+        # - Branch 0: Nieuwe Maas (NM) - connects v2-v3 (ocean connection)
+        # - Branch 1: Nieuwe Merwede (NE) - connects v1-v2
+        # - Branch 2: Oude Maas (OM) - connects v2-v3 (ocean connection)
         nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                      branch_index=1, reverse_x=True)
+                                                      branch_index=0, reverse_x=True)
         nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                         branch_index=2, reverse_x=True)
+                                                         branch_index=1, reverse_x=True)
+        oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                    branch_index=2, reverse_x=True)
         
         # Ocean channels (model.eta0_o has 2 branches: [NW, HK])
         nieuwe_waterweg_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
@@ -236,10 +245,10 @@ def run_tidal_model(params: ModelParameters):
                 "waal": waal_results,
                 "haringvliet": haringvliet_results,
                 
-                # Middle channels
-                "oude_maas": oude_maas_results,
+                # Middle channels (correct order: NM, NE, OM)
                 "nieuwe_maas": nieuwe_maas_results,
                 "nieuwe_merwede": nieuwe_merwede_results,
+                "oude_maas": oude_maas_results,
                 
                 # Ocean channels
                 "nieuwe_waterweg": nieuwe_waterweg_results,
