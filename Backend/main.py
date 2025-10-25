@@ -299,9 +299,7 @@ def run_tidal_model(params: ModelParameters):
         for result in haringvliet_results:
             result['position'] = -result['position']
             result['position_km'] = -result['position_km']
-        
-        # Reverse haringvliet results order since flow is opposite
-        haringvliet_results = list(reversed(haringvliet_results))
+
         
         # Process results
         results = {
