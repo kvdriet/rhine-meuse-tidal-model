@@ -215,46 +215,80 @@ def run_tidal_model(params: ModelParameters):
         
         print("Model run complete, processing results...")
         
-        # Calculate offsets for network alignment
-        # Ocean channels start at x=0 (after reversal)
-        # Middle channels connect at v3, so offset by ocean length
-        # River/Haringvliet connect at v2, offset by ocean + appropriate middle length
+        # Calculate positions for natural geography (ocean LEFT, river RIGHT)
+        # We'll invert the coordinate system: multiply all positions by -1
+        # This makes ocean channels appear at negative x (left side)
+        # and river channels at positive x (right side)
         
-        L_o_avg = float((model.L_o[0] + model.L_o[1]) / 2)  # Average ocean length
-        L_m_nm = float(model.L_m[1])  # Nieuwe Maas length
+        C = float(np.max(model.L_r)) / 1000  # km, reference point
         
-        # Extract results for each channel with proper offsets
-        # River channels (offset to start after middle channels at v1)
-        waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                              branch_index=0, reverse_x=True, 
-                                              x_offset=L_o_avg + L_m_nm)
+        # River positions
+        x_river_begin = (np.max(model.L_r) - model.L_r) / 1000  # km
+        test = np.array([0, (model.L_m[1] + model.L_r[1]) / 1000])  # km
         
-        # Haringvliet should start at v2 position (ocean + NM length)
-        haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                                     branch_index=1, reverse_x=True,
-                                                     x_offset=L_o_avg)
+        # For natural geography: negate all positions after applying offsets
+        # This inverts left-right so ocean is on the left
         
-        # Middle channels - CORRECT mapping to match YOUR model
-        # eta0_m[:, 0] = Nieuwe Maas (NM) - HIGH amplitude, ocean-connected
-        # eta0_m[:, 1] = Nieuwe Merwede (NE) - LOW amplitude, river side
-        # eta0_m[:, 2] = Oude Maas (OM) - ocean-connected
-        nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                      branch_index=0, reverse_x=True,
-                                                      x_offset=L_o_avg)
-        nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                         branch_index=1, reverse_x=True,
-                                                         x_offset=L_o_avg)
-        oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                    branch_index=2, reverse_x=True,
-                                                    x_offset=L_o_avg)
-        
-        # Ocean channels (no offset, start at x=0)
+        # Ocean channels (will appear on the LEFT, negative x)
         nieuwe_waterweg_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
                                                           branch_index=0, reverse_x=True,
-                                                          x_offset=0)
+                                                          x_offset=-C * 1000)
         hartelkanaal_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
                                                        branch_index=1, reverse_x=True,
-                                                       x_offset=0)
+                                                       x_offset=-C * 1000)
+        
+        # Negate x-coordinates for natural geography
+        for result in nieuwe_waterweg_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        for result in hartelkanaal_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        
+        # Middle channels
+        nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                      branch_index=0, reverse_x=True,
+                                                      x_offset=-C * 1000)
+        nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                         branch_index=1, reverse_x=True,
+                                                         x_offset=-C * 1000)
+        oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                    branch_index=2, reverse_x=True,
+                                                    x_offset=-C * 1000)
+        
+        # Negate for natural geography
+        for result in nieuwe_maas_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        for result in nieuwe_merwede_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        for result in oude_maas_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        
+        # River channels (will appear on the RIGHT, positive x)
+        waal_offset = (x_river_begin[0] + test[0] - C) * 1000
+        waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
+                                              branch_index=0, reverse_x=True, 
+                                              x_offset=waal_offset)
+        
+        # Haringvliet - REVERSE the amplitude array since flow is opposite
+        haringvliet_offset = (x_river_begin[1] + test[1] - C) * 1000
+        haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
+                                                     branch_index=1, reverse_x=False,  # Don't reverse
+                                                     x_offset=haringvliet_offset)
+        
+        # Negate for natural geography
+        for result in waal_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        for result in haringvliet_results:
+            result['position'] = -result['position']
+            result['position_km'] = -result['position_km']
+        
+        # Reverse haringvliet results order since flow is opposite
+        haringvliet_results = list(reversed(haringvliet_results))
         
         # Process results
         results = {
