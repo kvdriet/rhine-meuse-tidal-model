@@ -662,13 +662,18 @@
                 if (results.channels[ch.key]) {
                     results.channels[ch.key].forEach(function(pt) {
                         maxAmp = Math.max(maxAmp, pt.eta.amplitude);
-                        minPos = Math.min(minPos, pt.position_km || pt.position / 1000);
-                        maxPos = Math.max(maxPos, pt.position_km || pt.position / 1000);
+                        var pos = pt.position_km || pt.position / 1000;
+                        minPos = Math.min(minPos, pos);
+                        maxPos = Math.max(maxPos, pos);
                     });
                 }
             });
             
-            // Add padding
+            // Add padding to x-range (especially on left for negative values)
+            var xRange = maxPos - minPos;
+            minPos = minPos - xRange * 0.1;  // 10% padding on left
+            maxPos = maxPos + xRange * 0.05;  // 5% padding on right
+            
             var padding = {left: 60, right: 150, top: 40, bottom: 50};
             var plotWidth = width - padding.left - padding.right;
             var plotHeight = height - padding.top - padding.bottom;
@@ -679,7 +684,7 @@
             }
             
             function scaleY(amp) {
-                return height - padding.bottom - (amp / (maxAmp * 1.1)) * plotHeight;
+                return height - padding.bottom - (amp / (maxAmp * 1.05)) * plotHeight;  // Less padding on top
             }
             
             // Draw axes
@@ -692,7 +697,7 @@
             ctx.lineTo(padding.left, padding.top);
             ctx.stroke();
             
-            // Draw grid
+            // Draw grid and axes
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 0.5;
             for (var i = 0; i <= 5; i++) {
@@ -706,7 +711,28 @@
                 ctx.fillStyle = '#cbd5e1';
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText((maxAmp * i / 5).toFixed(2), padding.left - 5, y + 4);
+                ctx.fillText((maxAmp * i / 5 * 1.05).toFixed(2), padding.left - 5, y + 4);
+            }
+            
+            // X-axis grid and labels
+            var xTicks = 8;
+            for (var i = 0; i <= xTicks; i++) {
+                var x = padding.left + (i / xTicks) * plotWidth;
+                var xValue = minPos + (i / xTicks) * (maxPos - minPos);
+                
+                // Grid line
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, height - padding.bottom);
+                ctx.stroke();
+                
+                // Label
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(xValue.toFixed(0), x, height - padding.bottom + 20);
             }
             
             // Axis labels

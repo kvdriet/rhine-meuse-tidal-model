@@ -6,7 +6,7 @@ import numpy as np
 import json
 
 # Import your model class
-from network_model_RM import Network_model_RM
+from rhine_meuse_test import Network_model_RM
 
 app = FastAPI(title="Rhine-Meuse Tidal Model API")
 
@@ -246,15 +246,28 @@ def run_tidal_model(params: ModelParameters):
             result['position_km'] = -result['position_km']
         
         # Middle channels
+        # Oude Maas should align with ocean endpoint, others offset normally
         nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
                                                       branch_index=0, reverse_x=True,
                                                       x_offset=-C * 1000)
         nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
                                                          branch_index=1, reverse_x=True,
                                                          x_offset=-C * 1000)
+        # Oude Maas: special handling to align with ocean
         oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
                                                     branch_index=2, reverse_x=True,
                                                     x_offset=-C * 1000)
+        
+        # Calculate ocean endpoint position
+        if nieuwe_waterweg_results:
+            ocean_end_pos = max([r['position'] for r in nieuwe_waterweg_results + hartelkanaal_results])
+            # Shift Oude Maas to start at ocean endpoint
+            if oude_maas_results:
+                oude_maas_start = oude_maas_results[0]['position']
+                shift = ocean_end_pos - oude_maas_start
+                for result in oude_maas_results:
+                    result['position'] += shift
+                    result['position_km'] += shift / 1000
         
         # Negate for natural geography
         for result in nieuwe_maas_results:
