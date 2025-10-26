@@ -205,6 +205,24 @@ def run_tidal_model(params: ModelParameters):
         # Initialize model with parameters
         model = Network_model_RM(Av=Av, Sf=Sf)
         
+        # OPTIMIZATION: Reduce spatial resolution to save memory
+        # This allows more animation frames for smoother propagation visualization
+        model.N = 100  # Reduced from 500 to 100 (5x memory reduction)
+        
+        # Recreate spatial grids with new N
+        model.x = np.linspace(0, model.L, model.N)
+        model.x_r = np.linspace(0, model.L_r, model.N)
+        model.x_m1 = np.linspace(model.L_r[0], model.L_r[0] + model.L_m[:2], model.N)
+        model.x_m2 = np.linspace(model.L_r[0] + model.L_m[1], model.L_r[0] + model.L_m[1] + model.L_m[2], model.N)
+        model.x_m = np.column_stack((model.x_m1, model.x_m2))
+        model.x_o = np.linspace(model.L_r[0] + model.L_m[0], model.L, model.N)
+        model.z_r = np.linspace(-model.H_r, 0, model.N)
+        model.z_o = np.linspace(-model.H_o, 0, model.N)
+        model.z_m = np.linspace(-model.H_m, 0, model.N)
+        model.B_rx = model.B_river * np.exp((model.x_r - model.x_r[0]) / model.Lb_r)
+        model.B_mx = model.B_middle * np.exp((model.x_m - model.x_m[0]) / model.Lb_m)
+        model.B_ox = model.B_ocean * np.exp((model.x_o - model.x_o[0]) / model.Lb_o)
+        
         # Adjust depths for all channel types
         model.H_r = model.H_r + depth_adj  # River channels (includes Waal + Haringvliet)
         model.H_m = model.H_m + depth_adj  # Middle channels (OM, NM, NE)
@@ -356,7 +374,7 @@ def run_tidal_model(params: ModelParameters):
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
             "time_series": {
                 "data": time_series,
-                "num_frames": 24,  # Frontend will generate 24 frames
+                "num_frames": 60,  # Increased from 24 to 60 for smoother propagation
                 "period_hours": 12.42,  # M2 tide period
                 "format": "amplitude_phase",  # Optimized: send amplitude & phase, not all time values
                 "description": "Amplitude and phase arrays for each channel (frontend calculates time series)"

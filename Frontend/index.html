@@ -558,10 +558,10 @@
         </div>
         <div class="speed-control">
             <label>Animation Speed:</label>
-            <input type="range" id="speedSlider" min="0.5" max="5" step="0.5" value="2" 
+            <input type="range" id="speedSlider" min="1" max="15" step="1" value="5" 
                    oninput="updateAnimationSpeed(this.value)">
             <div style="text-align: center; color: #38bdf8; margin-top: 5px;">
-                <span id="speedValue">2</span>x
+                <span id="speedValue">5</span>x
             </div>
         </div>
         <div class="color-legend">
@@ -977,7 +977,7 @@
         var animationData = null;
         var animationInterval = null;
         var currentFrame = 0;
-        var animationSpeed = 2; // frames per second
+        var animationSpeed = 5; // frames per second (default 5 FPS for 60 frames)
         var isPlaying = false;
 
         function toggleAnimation() {
