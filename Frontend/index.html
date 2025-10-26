@@ -1091,7 +1091,10 @@
             var vmin = animationData.global_min;
             var vmax = animationData.global_max;
             
-            // Create scatter points for each channel
+            // Channels that need reversal (ocean and middle channels - max amplitude at ocean side)
+            var channelsToReverse = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 'nieuwe_merwede', 'oude_maas'];
+            
+            // Create smooth gradient polylines for each channel
             channelLayers.forEach(function(ch) {
                 var apiName = channelMapping[ch.name];
                 var kmlKey = kmlMapping[ch.name];
@@ -1105,38 +1108,54 @@
                         return;
                     }
                     
-                    // For each spatial point along the channel
+                    // Calculate water levels for all points
+                    var waterLevels = [];
                     channelData.points.forEach(function(point) {
-                        // Calculate eta(t) = amplitude * cos(t - phase)
                         var eta_t = point.amplitude * Math.cos(t - point.phase);
+                        waterLevels.push(eta_t);
+                    });
+                    
+                    // Reverse water levels for ocean and middle channels (max at ocean side)
+                    if (channelsToReverse.indexOf(apiName) !== -1) {
+                        waterLevels.reverse();
+                    }
+                    
+                    // Create colored line segments between consecutive points (smooth gradient)
+                    for (var i = 0; i < waterLevels.length - 1; i++) {
+                        var eta1 = waterLevels[i];
+                        var eta2 = waterLevels[i + 1];
                         
-                        // Get coordinate for this point (interpolate from KML data)
-                        var coordIndex = Math.min(
-                            Math.floor(point.index * kmlCoords.length / channelData.total_points),
-                            kmlCoords.length - 1
-                        );
-                        var coord = kmlCoords[coordIndex];
+                        // Average water level for this segment
+                        var etaAvg = (eta1 + eta2) / 2;
                         
-                        // Normalize eta_t to 0-1 range using global min/max
-                        var normalized = (eta_t - vmin) / (vmax - vmin);
+                        // Get coordinates for this segment from kmlCoords
+                        var kmlIndex1 = Math.floor(i * kmlCoords.length / waterLevels.length);
+                        var kmlIndex2 = Math.floor((i + 1) * kmlCoords.length / waterLevels.length);
+                        
+                        // Ensure indices are within bounds
+                        kmlIndex1 = Math.min(kmlIndex1, kmlCoords.length - 1);
+                        kmlIndex2 = Math.min(kmlIndex2, kmlCoords.length - 1);
+                        
+                        var coord1 = kmlCoords[kmlIndex1];
+                        var coord2 = kmlCoords[kmlIndex2];
+                        
+                        // Normalize eta to 0-1 range using global min/max
+                        var normalized = (etaAvg - vmin) / (vmax - vmin);
                         normalized = Math.max(0, Math.min(1, normalized));
                         
-                        // Use RdBu_r colormap (red for high, blue for low - reversed)
+                        // Get RdBu_r color for this segment
                         var color = getRdBuColor_r(normalized);
                         
-                        // Create circle marker at this location (larger size for smooth line)
-                        var marker = L.circleMarker([coord[0], coord[1]], {
-                            radius: 6,  // Increased from 4 to 6 for smoother line effect
-                            fillColor: color,
-                            fillOpacity: 1.0,  // Full opacity
+                        // Create polyline segment (smooth line between two points)
+                        var segment = L.polyline([coord1, coord2], {
                             color: color,
-                            weight: 2,  // Thicker border
-
-                            opacity: 0.8
+                            weight: 8,  // Thick line for visibility
+                            opacity: 1.0,
+                            smoothFactor: 1
                         }).addTo(map);
                         
-                        scatterMarkers.push(marker);
-                    });
+                        scatterMarkers.push(segment);
+                    }
                 }
             });
         }
