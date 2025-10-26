@@ -721,6 +721,17 @@
             'Waal': 'waal'
         };
         
+        // Map display names to kmlData keys
+        var kmlMapping = {
+            'Nieuwe Waterweg': 'nieuwewaterweg',
+            'Hartelkanaal': 'hartelkanaal',
+            'Haringvliet + Hollands Diep': 'haringvliet',
+            'Nieuwe Maas': 'nieuwemaas',
+            'Nieuwe Merwede': 'nieuwemerwede',
+            'Oude Maas + Dordtsche Kil': 'oudemaas',
+            'Waal': 'waal'
+        };
+        
         var currentResults = null; // Store results for graph
         
         function showAmplitudeGraph() {
@@ -1060,12 +1071,16 @@
             // Create scatter points for each channel
             channelLayers.forEach(function(ch) {
                 var apiName = channelMapping[ch.name];
+                var kmlKey = kmlMapping[ch.name];
                 
                 if (apiName && animationData.data[apiName]) {
                     var channelData = animationData.data[apiName];
-                    var kmlCoords = kmlData[ch.name]; // Get coordinates for this channel
+                    var kmlCoords = kmlData[kmlKey]; // Get coordinates for this channel
                     
-                    if (!kmlCoords) return;
+                    if (!kmlCoords) {
+                        console.warn('No KML coords for:', ch.name, 'kmlKey:', kmlKey);
+                        return;
+                    }
                     
                     // For each spatial point along the channel
                     channelData.points.forEach(function(point) {
@@ -1136,6 +1151,9 @@
             // Activate animation if time series data is available
             if (results.time_series) {
                 animationData = results.time_series;
+                console.log('Animation data loaded:', animationData);
+                console.log('Channels in data:', Object.keys(animationData.data || {}));
+                console.log('Sample channel data:', animationData.data ? animationData.data['nieuwe_waterweg'] : 'none');
                 document.getElementById('animationPanel').classList.add('visible');
                 resetAnimation();
             }
