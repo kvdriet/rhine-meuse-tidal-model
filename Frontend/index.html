@@ -342,6 +342,76 @@
         .leaflet-popup-content { margin: 10px; font-size: 13px; }
         .leaflet-popup-content h4 { color: #38bdf8; margin-bottom: 8px; }
         .leaflet-popup-tip { background: rgba(15, 23, 42, 0.98); }
+        
+        /* Animation Controls */
+        .animation-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.97);
+            padding: 20px;
+            border-radius: 12px;
+            z-index: 1000;
+            min-width: 320px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: none;
+        }
+        
+        .animation-panel.visible { display: block; }
+        
+        .animation-panel h3 {
+            color: #38bdf8;
+            font-size: 16px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .animation-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .animation-btn {
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .animation-btn:hover {
+            background: rgba(56, 189, 248, 0.3);
+        }
+        
+        .animation-btn.active {
+            background: #38bdf8;
+            color: #0a0e27;
+        }
+        
+        .time-display {
+            text-align: center;
+            color: #38bdf8;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .speed-control {
+            margin-top: 15px;
+        }
+        
+        .speed-control label {
+            color: #cbd5e1;
+            font-size: 13px;
+            display: block;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 <body>
@@ -471,6 +541,23 @@
         <div class="legend-item"><div class="legend-color" style="background: #007cf5;"></div><span>Haringvliet</span></div>
         <div class="legend-item"><div class="legend-color" style="background: #00FFFF;"></div><span>N. Waterweg</span></div>
         <div class="legend-item"><div class="legend-color" style="background: #FF00FF;"></div><span>Hartelkanaal</span></div>
+    </div>
+    
+    <div class="animation-panel" id="animationPanel">
+        <h3>🌊 Tide Animation</h3>
+        <div class="time-display" id="timeDisplay">Time: 0:00</div>
+        <div class="animation-controls">
+            <button class="animation-btn" id="playBtn" onclick="toggleAnimation()">▶️ Play</button>
+            <button class="animation-btn" onclick="resetAnimation()">⏮️ Reset</button>
+        </div>
+        <div class="speed-control">
+            <label>Animation Speed:</label>
+            <input type="range" id="speedSlider" min="0.5" max="5" step="0.5" value="2" 
+                   oninput="updateAnimationSpeed(this.value)">
+            <div style="text-align: center; color: #38bdf8; margin-top: 5px;">
+                <span id="speedValue">2</span>x
+            </div>
+        </div>
     </div>
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -869,6 +956,120 @@
             
             console.log('Visualization complete! Line thickness and opacity show tidal amplitude.');
         }
+        
+        // ===== ANIMATION FUNCTIONS =====
+        
+        // Animation state
+        var animationData = null;
+        var animationInterval = null;
+        var currentFrame = 0;
+        var animationSpeed = 2; // frames per second
+        var isPlaying = false;
+
+        function toggleAnimation() {
+            if (!animationData) {
+                alert('Please run a simulation first!');
+                return;
+            }
+            
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        }
+
+        function playAnimation() {
+            isPlaying = true;
+            document.getElementById('playBtn').innerHTML = '⏸️ Pause';
+            document.getElementById('playBtn').classList.add('active');
+            
+            animationInterval = setInterval(function() {
+                currentFrame = (currentFrame + 1) % animationData.num_frames;
+                updateVisualization(currentFrame);
+            }, 1000 / animationSpeed);
+        }
+
+        function pauseAnimation() {
+            isPlaying = false;
+            document.getElementById('playBtn').innerHTML = '▶️ Play';
+            document.getElementById('playBtn').classList.remove('active');
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+        }
+
+        function resetAnimation() {
+            pauseAnimation();
+            currentFrame = 0;
+            updateVisualization(currentFrame);
+        }
+
+        function updateAnimationSpeed(value) {
+            animationSpeed = parseFloat(value);
+            document.getElementById('speedValue').textContent = value;
+            
+            // Restart animation if playing
+            if (isPlaying) {
+                pauseAnimation();
+                playAnimation();
+            }
+        }
+
+        function updateVisualization(frameIndex) {
+            if (!animationData || !channelLayers) return;
+            
+            // Calculate current time in the tidal cycle
+            var period_hours = animationData.period_hours;
+            var currentTime = (frameIndex / animationData.num_frames) * period_hours;
+            var hours = Math.floor(currentTime);
+            var minutes = Math.floor((currentTime - hours) * 60);
+            document.getElementById('timeDisplay').textContent = 
+                'Time: ' + hours + ':' + (minutes < 10 ? '0' : '') + minutes;
+            
+            // Update each channel visualization
+            channelLayers.forEach(function(ch) {
+                var apiName = channelMapping[ch.name];
+                
+                if (apiName && animationData.data[apiName]) {
+                    var channelTimeData = animationData.data[apiName][frameIndex];
+                    
+                    // Calculate average water level for this frame
+                    var avgLevel = channelTimeData.reduce(function(sum, val) { 
+                        return sum + val; 
+                    }, 0) / channelTimeData.length;
+                    
+                    // Map water level to visual properties
+                    // Positive = high tide (thicker, brighter), Negative = low tide (thinner, dimmer)
+                    var normalized = (avgLevel + 1) / 2; // Normalize to 0-1 range (assuming max amp ~1m)
+                    var baseWeight = ch.data.weight || 5;
+                    var newWeight = baseWeight + (normalized * 8); // Vary from base to base+8
+                    var opacity = 0.5 + (normalized * 0.5); // Vary from 0.5 to 1.0
+                    
+                    ch.layer.setStyle({
+                        weight: newWeight,
+                        opacity: opacity,
+                        color: ch.data.color
+                    });
+                }
+            });
+        }
+
+        // Hook into displayResults to activate animation panel when results are available
+        var originalDisplayResults = displayResults;
+        displayResults = function(results) {
+            // Call original function
+            originalDisplayResults(results);
+            
+            // Activate animation if time series data is available
+            if (results.time_series) {
+                animationData = results.time_series;
+                document.getElementById('animationPanel').classList.add('visible');
+                resetAnimation();
+            }
+        };
         
         // Initialize map
         setTimeout(initMap, 100);
