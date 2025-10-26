@@ -236,16 +236,27 @@ def run_tidal_model(params: ModelParameters):
         eta0_m2_ocean = model.eta0_o.copy()
         eta0_m2_middle = model.eta0_m.copy()
         
-        # Run M4 tide calculation
-        model.M2(M4="yes")
+        # Calculate INTERNAL M4 (overtides from non-linear processes)
+        model.M4()  # Initialize M4
+        model.stokes_M4()  # Stokes drift contribution
+        model.no_stress_M4()  # No-stress contribution
+        model.adv_M4()  # Advection contribution
+        model.M4_total()  # Combine all M4 components
+        model.full_tide(first_order="yes")  # Full tide solution
         
-        # Store M4 results
-        eta0_m4_river = model.eta0_r.copy()
-        eta0_m4_ocean = model.eta0_o.copy()
-        eta0_m4_middle = model.eta0_m.copy()
+        # Store internal M4 results (eta14 = M2 + M4)
+        eta14_river = model.eta14_r.copy()
+        eta14_ocean = model.eta14_o.copy()
+        eta14_middle = model.eta14_m.copy()
         
-        # Calculate M4/M2 ratio
-        eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)  # Add small value to avoid division by zero
+        # Extract M4 component (eta14 contains M2+M4, so eta_M4 = eta14 - eta_M2 approximately)
+        # But model stores M4 separately, so use those directly
+        eta0_m4_river = model.eta0_r.copy() if hasattr(model, 'eta0_r') else eta14_river - eta0_m2_river
+        eta0_m4_ocean = model.eta0_o.copy() if hasattr(model, 'eta0_o') else eta14_ocean - eta0_m2_ocean
+        eta0_m4_middle = model.eta0_m.copy() if hasattr(model, 'eta0_m') else eta14_middle - eta0_m2_middle
+        
+        # Calculate M4/M2 ratio (shows strength of non-linear effects)
+        eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)
         eta0_ratio_ocean = np.abs(eta0_m4_ocean) / (np.abs(eta0_m2_ocean) + 1e-10)
         eta0_ratio_middle = np.abs(eta0_m4_middle) / (np.abs(eta0_m2_middle) + 1e-10)
         
@@ -254,10 +265,6 @@ def run_tidal_model(params: ModelParameters):
         model.eta0_o = eta0_m2_ocean
         model.eta0_m = eta0_m2_middle
 
-        eta0_m2_ocean = model.eta0_o.copy()
-        eta0_m2_middle = model.eta0_m.copy()
-        
-        # Run M4 tide calculation
         model.M2(M4="yes")
         
         # Store M4 results
