@@ -412,6 +412,12 @@
             display: block;
             margin-bottom: 8px;
         }
+        
+        .color-legend {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(56, 189, 248, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -556,6 +562,14 @@
                    oninput="updateAnimationSpeed(this.value)">
             <div style="text-align: center; color: #38bdf8; margin-top: 5px;">
                 <span id="speedValue">2</span>x
+            </div>
+        </div>
+        <div class="color-legend">
+            <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;">Water Level:</label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; color: #94a3b8;">Low</span>
+                <div style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(0,0,139), rgb(255,255,255), rgb(139,0,0)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
+                <span style="font-size: 11px; color: #94a3b8;">High</span>
             </div>
         </div>
     </div>
@@ -1042,20 +1056,50 @@
                     // Calculate eta(t) = amplitude * cos(t - phase) for the channel
                     var eta_t = channelData.amplitude * Math.cos(t - channelData.phase);
                     
-                    // Map water level to visual properties
-                    // Positive = high tide (thicker, brighter), Negative = low tide (thinner, dimmer)
-                    var normalized = (eta_t + 1) / 2; // Normalize to 0-1 range (assuming max amp ~1m)
-                    var baseWeight = ch.data.weight || 5;
-                    var newWeight = baseWeight + (normalized * 8); // Vary from base to base+8
-                    var opacity = 0.5 + (normalized * 0.5); // Vary from 0.5 to 1.0
+                    // Normalize water level to 0-1 range
+                    // Use amplitude as reference for normalization
+                    var maxAmp = Math.max(channelData.amplitude, 0.8); // At least 0.8m for scaling
+                    var normalized = (eta_t + maxAmp) / (2 * maxAmp); // 0 = low tide, 1 = high tide
+                    normalized = Math.max(0, Math.min(1, normalized)); // Clamp to 0-1
+                    
+                    // Color gradient: Blue (low tide) → White (mid) → Red (high tide)
+                    // Similar to your GIF's colormap
+                    var color = getWaterLevelColor(normalized);
+                    
+                    // Keep consistent line width and high opacity for visibility
+                    var lineWeight = 6; // Fixed width for better visibility
                     
                     ch.layer.setStyle({
-                        weight: newWeight,
-                        opacity: opacity,
-                        color: ch.data.color
+                        weight: lineWeight,
+                        opacity: 0.9,
+                        color: color
                     });
                 }
             });
+        }
+        
+        // Color interpolation function (blue → white → red, like your GIF)
+        function getWaterLevelColor(normalized) {
+            // normalized: 0 = low tide (blue), 0.5 = mid (white/light), 1 = high tide (red)
+            var r, g, b;
+            
+            if (normalized < 0.5) {
+                // Low tide: blue to white
+                // Blue (0,0,139) to White (255,255,255)
+                var t = normalized * 2; // 0 to 1
+                r = Math.round(0 + (255 - 0) * t);
+                g = Math.round(0 + (255 - 0) * t);
+                b = Math.round(139 + (255 - 139) * t);
+            } else {
+                // High tide: white to red
+                // White (255,255,255) to Red (139,0,0)
+                var t = (normalized - 0.5) * 2; // 0 to 1
+                r = Math.round(255 + (139 - 255) * t);
+                g = Math.round(255 + (0 - 255) * t);
+                b = Math.round(255 + (0 - 255) * t);
+            }
+            
+            return 'rgb(' + r + ',' + g + ',' + b + ')';
         }
 
         // Hook into displayResults to activate animation panel when results are available
