@@ -215,121 +215,83 @@ def run_tidal_model(params: ModelParameters):
         
         print("Model run complete, processing results...")
         
-        # Calculate positions for natural geography (ocean LEFT, river RIGHT)
-        # Using the coordinate system with C offset
+        # Using the working Python plotting logic (ocean right, river left), then flipping
+        # This matches your original matplotlib code that works correctly
         
-        C = float(np.max(model.L_r)) / 1000  # km, reference point
+        C = float(np.max(model.L_r)) / 1000  # km, reference point (95 km)
         
-        # River positions
+        # Calculate river x positions
         x_river_begin = (np.max(model.L_r) - model.L_r) / 1000  # km
         test = np.array([0, (model.L_m[1] + model.L_r[1]) / 1000])  # km
         
-        # Ocean channels (will appear on the LEFT, negative x)
+        # OCEAN CHANNELS - process with offset -C (will be on right before flip)
         nieuwe_waterweg_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
-                                                          branch_index=0, reverse_x=True,
+                                                          branch_index=0, reverse_x=False,
                                                           x_offset=-C * 1000)
         hartelkanaal_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
-                                                       branch_index=1, reverse_x=True,
+                                                       branch_index=1, reverse_x=False,
                                                        x_offset=-C * 1000)
         
-        # Negate x-coordinates for natural geography
-        for result in nieuwe_waterweg_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        for result in hartelkanaal_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        
-        # Middle channels
+        # MIDDLE CHANNELS - NM and NE standard, OM needs special x_middle3 treatment
         nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                      branch_index=0, reverse_x=True,
+                                                      branch_index=0, reverse_x=False,
                                                       x_offset=-C * 1000)
         nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                         branch_index=1, reverse_x=True,
+                                                         branch_index=1, reverse_x=False,
                                                          x_offset=-C * 1000)
-        oude_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
-                                                    branch_index=2, reverse_x=True,
-                                                    x_offset=-C * 1000)
         
-        # Negate for natural geography
-        for result in nieuwe_maas_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        for result in nieuwe_merwede_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        for result in oude_maas_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
+        # Oude Maas (OM) - create x_middle3 positions (from x_middle[-1,1] to x_ocean[0,0])
+        # This connects OM properly between middle and ocean
+        oude_maas_results = []
+        N = len(model.eta0_m)
+        x_middle3_start = model.x_m[-1, 1]  # End of middle branch 1 (NE)
+        x_middle3_end = model.x_o[0, 0]  # Start of ocean branch 0
+        x_middle3 = np.linspace(x_middle3_start, x_middle3_end, N)
         
-        # Align Oude Maas START with ocean endpoint (v3) - after coordinate negation
-        if nieuwe_waterweg_results and hartelkanaal_results and oude_maas_results:
-            # Ocean channels end at their maximum position (rightmost point)
-            ocean_end_pos = max([r['position'] for r in nieuwe_waterweg_results + hartelkanaal_results])
-            # Oude Maas should start where ocean ends
-            oude_maas_start = min([r['position'] for r in oude_maas_results])  # leftmost point of OM
-            shift = ocean_end_pos - oude_maas_start
-            for result in oude_maas_results:
-                result['position'] += shift
-                result['position_km'] += shift / 1000
+        for i in range(N):
+            oude_maas_results.append({
+                'position': float(x_middle3[i] - C * 1000),
+                'position_km': float(x_middle3[i] / 1000 - C),
+                'eta': complex_to_dict(model.eta0_m[i, 2]),
+                'velocity': complex_to_dict(model.u0_mean_m[i, 2] if model.u0_mean_m.ndim > 1 else model.u0_mean_m[i])
+            })
         
-        # Align Nieuwe Maas START with Nieuwe Merwede END (at v2)
-        if nieuwe_merwede_results and nieuwe_maas_results:
-            # v2 is where Nieuwe Merwede ends (rightmost point)
-            v2_position = max([r['position'] for r in nieuwe_merwede_results])
-            # Nieuwe Maas should start at v2
-            nm_start = min([r['position'] for r in nieuwe_maas_results])
-            shift_nm = v2_position - nm_start
-            for result in nieuwe_maas_results:
-                result['position'] += shift_nm
-                result['position_km'] += shift_nm / 1000
+        # RIVER CHANNELS
+        # Waal
+        waal_results = []
+        for i in range(len(model.x_r)):
+            x_val = (x_river_begin[0] + test[0]) + model.x_r[i, 0] / 1000
+            waal_results.append({
+                'position': float((x_val - C) * 1000),
+                'position_km': float(x_val - C),
+                'eta': complex_to_dict(model.eta0_r[i, 0]),
+                'velocity': complex_to_dict(model.u0_mean_r[i, 0])
+            })
         
-        # River channels (will appear on the RIGHT, positive x)
-        waal_offset = (x_river_begin[0] + test[0] - C) * 1000
-        waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                              branch_index=0, reverse_x=True, 
-                                              x_offset=waal_offset)
+        # Haringvliet - with reversed amplitudes ([::-1])
+        haringvliet_results = []
+        for i in range(len(model.x_r)):
+            x_val = (x_river_begin[1] + test[1]) + model.x_r[i, 1] / 1000
+            # Reverse the amplitude index
+            rev_idx = len(model.x_r) - 1 - i
+            haringvliet_results.append({
+                'position': float((x_val - C) * 1000),
+                'position_km': float(x_val - C),
+                'eta': complex_to_dict(model.eta0_r[rev_idx, 1]),  # Reversed!
+                'velocity': complex_to_dict(model.u0_mean_r[rev_idx, 1])  # Reversed!
+            })
         
-        # Haringvliet - amplitude data needs to be in OPPOSITE direction
-        haringvliet_offset = (x_river_begin[1] + test[1] - C) * 1000
-        haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                                     branch_index=1, reverse_x=True,
-                                                     x_offset=haringvliet_offset)
+        # NOW FLIP EVERYTHING: Negate all x-coordinates to put ocean on LEFT, river on RIGHT
+        all_results = [
+            nieuwe_waterweg_results, hartelkanaal_results,
+            nieuwe_maas_results, nieuwe_merwede_results, oude_maas_results,
+            waal_results, haringvliet_results
+        ]
         
-        # Negate for natural geography
-        for result in waal_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        for result in haringvliet_results:
-            result['position'] = -result['position']
-            result['position_km'] = -result['position_km']
-        
-        # Align Haringvliet START with v2 (Nieuwe Merwede END position)
-        # Note: Haringvliet should align with Nieuwe Merwede at v2, not Oude Maas
-        if nieuwe_merwede_results and haringvliet_results:
-            v2_position = max([r['position'] for r in nieuwe_merwede_results])  # v2 is at NE right end
-            hv_start = min([r['position'] for r in haringvliet_results])  # HV leftmost point
-            shift_hv = v2_position - hv_start
-            for result in haringvliet_results:
-                result['position'] += shift_hv
-                result['position_km'] += shift_hv / 1000
-        
-        # Flip Haringvliet x-coordinates (mirror across v2) - amplitude already correct from model
-        # The channel should extend to the RIGHT of v2, not left
-        if nieuwe_merwede_results and haringvliet_results:
-            v2_position = max([r['position'] for r in nieuwe_merwede_results])
-            haringvliet_results_flipped = []
-            for result in haringvliet_results:
-                result_flipped = result.copy()
-                # Mirror position across v2
-                distance_from_v2 = result['position'] - v2_position
-                result_flipped['position'] = v2_position - distance_from_v2
-                result_flipped['position_km'] = result_flipped['position'] / 1000
-                result_flipped['eta'] = result['eta']
-                result_flipped['velocity'] = result['velocity']
-                haringvliet_results_flipped.append(result_flipped)
-            # Reverse the order so they go from v2 outward
-            haringvliet_results = list(reversed(haringvliet_results_flipped))
+        for results_list in all_results:
+            for result in results_list:
+                result['position'] = -result['position']
+                result['position_km'] = -result['position_km']
         
         # Process results
         results = {
