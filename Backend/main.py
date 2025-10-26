@@ -328,8 +328,8 @@ def run_tidal_model(params: ModelParameters):
             'waal': waal_results
         }
         
-        # For each channel, extract spatial points (sample every 5th point to reduce data)
-        downsample = 5
+        # For each channel, extract spatial points (sample every 2nd point for smooth line effect)
+        downsample = 2  # Was 5, now 2 for smoother gradient line
         for ch_name in channel_names:
             results = channel_results_map[ch_name]
             

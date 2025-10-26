@@ -727,7 +727,7 @@
             'Hartelkanaal': 'hartelkanaal',
             'Haringvliet + Hollands Diep': 'haringvliet',
             'Nieuwe Maas': 'nieuwemaas',
-            'Nieuwe Merwede': 'nieuwemerwede',
+            'Nieuwe Merwede': 'nm',  // Fixed: was 'nieuwemerwede', but kmlData uses 'nm'
             'Oude Maas + Dordtsche Kil': 'oudemaas',
             'Waal': 'waal'
         };
@@ -1025,12 +1025,30 @@
                 clearInterval(animationInterval);
                 animationInterval = null;
             }
+            
+            // Restore original channel lines when paused
+            restoreChannelLines();
+            
+            // Remove scatter markers
+            scatterMarkers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            scatterMarkers = [];
         }
 
         function resetAnimation() {
             pauseAnimation();
             currentFrame = 0;
-            updateVisualization(currentFrame);
+        }
+        
+        // Restore original channel line visibility
+        function restoreChannelLines() {
+            channelLayers.forEach(function(ch) {
+                ch.layer.setStyle({
+                    opacity: 0.8,
+                    fillOpacity: 0.8
+                });
+            });
         }
 
         function updateAnimationSpeed(value) {
@@ -1063,6 +1081,11 @@
                 map.removeLayer(marker);
             });
             scatterMarkers = [];
+            
+            // Hide original channel lines during animation (only show gradient)
+            channelLayers.forEach(function(ch) {
+                ch.layer.setStyle({opacity: 0, fillOpacity: 0});
+            });
             
             // Global min/max for color scaling (like vmin/vmax in Python)
             var vmin = animationData.global_min;
@@ -1101,13 +1124,14 @@
                         // Use RdBu_r colormap (red for high, blue for low - reversed)
                         var color = getRdBuColor_r(normalized);
                         
-                        // Create circle marker at this location
+                        // Create circle marker at this location (larger size for smooth line)
                         var marker = L.circleMarker([coord[0], coord[1]], {
-                            radius: 4,
+                            radius: 6,  // Increased from 4 to 6 for smoother line effect
                             fillColor: color,
-                            fillOpacity: 0.8,
+                            fillOpacity: 1.0,  // Full opacity
                             color: color,
-                            weight: 1,
+                            weight: 2,  // Thicker border
+
                             opacity: 0.8
                         }).addTo(map);
                         
