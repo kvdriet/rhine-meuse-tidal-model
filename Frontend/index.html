@@ -565,10 +565,10 @@
             </div>
         </div>
         <div class="color-legend">
-            <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;">Water Level:</label>
+            <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;">M₂ Elevation:</label>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 11px; color: #94a3b8;">Low</span>
-                <div style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(0,0,139), rgb(255,255,255), rgb(139,0,0)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
+                <div style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
                 <span style="font-size: 11px; color: #94a3b8;">High</span>
             </div>
         </div>
@@ -979,6 +979,7 @@
         var currentFrame = 0;
         var animationSpeed = 5; // frames per second (default 5 FPS for 60 frames)
         var isPlaying = false;
+        var scatterMarkers = []; // Store scatter point markers for animation
 
         function toggleAnimation() {
             if (!animationData) {
@@ -1046,57 +1047,81 @@
             // Calculate current phase in the cycle (0 to 2π)
             var t = (frameIndex / animationData.num_frames) * 2 * Math.PI;
             
-            // Update each channel visualization
+            // Remove old scatter markers
+            scatterMarkers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+            scatterMarkers = [];
+            
+            // Global min/max for color scaling (like vmin/vmax in Python)
+            var vmin = animationData.global_min;
+            var vmax = animationData.global_max;
+            
+            // Create scatter points for each channel
             channelLayers.forEach(function(ch) {
                 var apiName = channelMapping[ch.name];
                 
                 if (apiName && animationData.data[apiName]) {
                     var channelData = animationData.data[apiName];
+                    var kmlCoords = kmlData[ch.name]; // Get coordinates for this channel
                     
-                    // Calculate eta(t) = amplitude * cos(t - phase) for the channel
-                    var eta_t = channelData.amplitude * Math.cos(t - channelData.phase);
+                    if (!kmlCoords) return;
                     
-                    // Normalize water level to 0-1 range
-                    // Use amplitude as reference for normalization
-                    var maxAmp = Math.max(channelData.amplitude, 0.8); // At least 0.8m for scaling
-                    var normalized = (eta_t + maxAmp) / (2 * maxAmp); // 0 = low tide, 1 = high tide
-                    normalized = Math.max(0, Math.min(1, normalized)); // Clamp to 0-1
-                    
-                    // Color gradient: Blue (low tide) → White (mid) → Red (high tide)
-                    // Similar to your GIF's colormap
-                    var color = getWaterLevelColor(normalized);
-                    
-                    // Keep consistent line width and high opacity for visibility
-                    var lineWeight = 6; // Fixed width for better visibility
-                    
-                    ch.layer.setStyle({
-                        weight: lineWeight,
-                        opacity: 0.9,
-                        color: color
+                    // For each spatial point along the channel
+                    channelData.points.forEach(function(point) {
+                        // Calculate eta(t) = amplitude * cos(t - phase)
+                        var eta_t = point.amplitude * Math.cos(t - point.phase);
+                        
+                        // Get coordinate for this point (interpolate from KML data)
+                        var coordIndex = Math.min(
+                            Math.floor(point.index * kmlCoords.length / channelData.total_points),
+                            kmlCoords.length - 1
+                        );
+                        var coord = kmlCoords[coordIndex];
+                        
+                        // Normalize eta_t to 0-1 range using global min/max
+                        var normalized = (eta_t - vmin) / (vmax - vmin);
+                        normalized = Math.max(0, Math.min(1, normalized));
+                        
+                        // Use RdBu_r colormap (red for high, blue for low - reversed)
+                        var color = getRdBuColor_r(normalized);
+                        
+                        // Create circle marker at this location
+                        var marker = L.circleMarker([coord[0], coord[1]], {
+                            radius: 4,
+                            fillColor: color,
+                            fillOpacity: 0.8,
+                            color: color,
+                            weight: 1,
+                            opacity: 0.8
+                        }).addTo(map);
+                        
+                        scatterMarkers.push(marker);
                     });
                 }
             });
         }
         
-        // Color interpolation function (blue → white → red, like your GIF)
-        function getWaterLevelColor(normalized) {
-            // normalized: 0 = low tide (blue), 0.5 = mid (white/light), 1 = high tide (red)
+        // RdBu_r colormap (Red-Blue reversed: high=red, low=blue)
+        // Matches matplotlib's RdBu_r colormap
+        function getRdBuColor_r(normalized) {
+            // normalized: 0 = low (blue), 1 = high (red)
+            // RdBu_r: Blue → White → Red
+            
             var r, g, b;
             
             if (normalized < 0.5) {
-                // Low tide: blue to white
-                // Blue (0,0,139) to White (255,255,255)
+                // Low values: Blue to White
                 var t = normalized * 2; // 0 to 1
-                r = Math.round(0 + (255 - 0) * t);
-                g = Math.round(0 + (255 - 0) * t);
-                b = Math.round(139 + (255 - 139) * t);
+                r = Math.round(33 + (255 - 33) * t);
+                g = Math.round(102 + (255 - 102) * t);
+                b = Math.round(172 + (255 - 172) * t);
             } else {
-                // High tide: white to red
-                // White (255,255,255) to Red (139,0,0)
+                // High values: White to Red
                 var t = (normalized - 0.5) * 2; // 0 to 1
-                r = Math.round(255 + (139 - 255) * t);
-                g = Math.round(255 + (0 - 255) * t);
-                b = Math.round(255 + (0 - 255) * t);
+                r = Math.round(255 + (178 - 255) * t);
+                g = Math.round(255 + (24 - 255) * t);
+                b = Math.round(255 + (43 - 255) * t);
             }
             
             return 'rgb(' + r + ',' + g + ',' + b + ')';

@@ -311,38 +311,54 @@ def run_tidal_model(params: ModelParameters):
                 result['position'] = -result['position']
                 result['position_km'] = -result['position_km']
         
-        # ULTRA-LIGHTWEIGHT animation: Send only channel-average amplitude & phase
-        # Frontend will animate based on average water level per channel
+        # SPATIAL ANIMATION: Send points along each channel with coordinates
+        # This matches your Python scatter plot approach
         time_series = {}
         channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'haringvliet', 
                         'nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal']
         
-        # Map to model outputs
-        channel_data_map = {
-            'nieuwe_waterweg': (model.eta0_o, 0),
-            'hartelkanaal': (model.eta0_o, 1),
-            'nieuwe_maas': (model.eta0_m, 0),
-            'nieuwe_merwede': (model.eta0_m, 1),
-            'oude_maas': (model.eta0_m, 2),
-            'haringvliet': (model.eta0_r, 1),
-            'waal': (model.eta0_r, 0)
+        # Map channels to their result arrays (which contain coordinates)
+        channel_results_map = {
+            'nieuwe_waterweg': nieuwe_waterweg_results,
+            'hartelkanaal': hartelkanaal_results,
+            'nieuwe_maas': nieuwe_maas_results,
+            'nieuwe_merwede': nieuwe_merwede_results,
+            'oude_maas': oude_maas_results,
+            'haringvliet': haringvliet_results,
+            'waal': waal_results
         }
         
+        # For each channel, extract spatial points (sample every 5th point to reduce data)
+        downsample = 5
         for ch_name in channel_names:
-            eta_array, branch_idx = channel_data_map[ch_name]
-            # Get channel data (just the branch)
-            if eta_array.ndim > 1:
-                eta_channel = eta_array[:, branch_idx]
-            else:
-                eta_channel = eta_array
+            results = channel_results_map[ch_name]
             
-            # Calculate average amplitude and phase for the entire channel
-            avg_complex = np.mean(eta_channel)
+            # Get coordinates from KML data (we need to match result indices to coordinates)
+            # Sample points for animation
+            sampled_points = []
+            for i in range(0, len(results), downsample):
+                eta_complex = results[i]['eta']
+                eta_val = complex(eta_complex['real'], eta_complex['imag'])
+                
+                sampled_points.append({
+                    'amplitude': float(np.abs(eta_val)),
+                    'phase': float(np.angle(eta_val)),
+                    'index': i  # Index to match with coordinates in frontend
+                })
             
             time_series[ch_name] = {
-                'amplitude': float(np.abs(avg_complex)),
-                'phase': float(np.angle(avg_complex))
+                'points': sampled_points,
+                'total_points': len(results)
             }
+        
+        # Calculate global min/max for consistent color scaling (like your vmin/vmax)
+        all_amplitudes = []
+        for ch_name in channel_names:
+            for point in time_series[ch_name]['points']:
+                all_amplitudes.append(point['amplitude'])
+        
+        global_min = -max(all_amplitudes)  # For vmin (negative of max amplitude)
+        global_max = max(all_amplitudes)   # For vmax
         
         # Process results
         results = {
@@ -376,8 +392,10 @@ def run_tidal_model(params: ModelParameters):
                 "data": time_series,
                 "num_frames": 60,  # Increased from 24 to 60 for smoother propagation
                 "period_hours": 12.42,  # M2 tide period
-                "format": "amplitude_phase",  # Optimized: send amplitude & phase, not all time values
-                "description": "Amplitude and phase arrays for each channel (frontend calculates time series)"
+                "format": "spatial_points",  # Spatial points with amplitude & phase
+                "global_min": float(global_min),  # For color scale (vmin)
+                "global_max": float(global_max),  # For color scale (vmax)
+                "description": "Spatial points along each channel with amplitude/phase (like Python scatter plot)"
             }
         }
         
