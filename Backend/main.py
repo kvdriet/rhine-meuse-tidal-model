@@ -273,6 +273,17 @@ def run_tidal_model(params: ModelParameters):
                 result['position'] += shift
                 result['position_km'] += shift / 1000
         
+        # Align Nieuwe Maas START with Nieuwe Merwede END (at v2)
+        if nieuwe_merwede_results and nieuwe_maas_results:
+            # v2 is where Nieuwe Merwede ends (rightmost point)
+            v2_position = max([r['position'] for r in nieuwe_merwede_results])
+            # Nieuwe Maas should start at v2
+            nm_start = min([r['position'] for r in nieuwe_maas_results])
+            shift_nm = v2_position - nm_start
+            for result in nieuwe_maas_results:
+                result['position'] += shift_nm
+                result['position_km'] += shift_nm / 1000
+        
         # River channels (will appear on the RIGHT, positive x)
         waal_offset = (x_river_begin[0] + test[0] - C) * 1000
         waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
@@ -293,23 +304,32 @@ def run_tidal_model(params: ModelParameters):
             result['position'] = -result['position']
             result['position_km'] = -result['position_km']
         
-        # Align Haringvliet START with v2 (Oude Maas END position)
-        if oude_maas_results and haringvliet_results:
-            v2_position = max([r['position'] for r in oude_maas_results])  # v2 is at OM right end
+        # Align Haringvliet START with v2 (Nieuwe Merwede END position)
+        # Note: Haringvliet should align with Nieuwe Merwede at v2, not Oude Maas
+        if nieuwe_merwede_results and haringvliet_results:
+            v2_position = max([r['position'] for r in nieuwe_merwede_results])  # v2 is at NE right end
             hv_start = min([r['position'] for r in haringvliet_results])  # HV leftmost point
             shift_hv = v2_position - hv_start
             for result in haringvliet_results:
                 result['position'] += shift_hv
                 result['position_km'] += shift_hv / 1000
         
-        # Reverse haringvliet amplitude direction (flow is opposite)
-        haringvliet_results_reversed = []
-        for i in range(len(haringvliet_results)):
-            result = haringvliet_results[i].copy()
-            result['eta'] = haringvliet_results[len(haringvliet_results) - 1 - i]['eta']
-            result['velocity'] = haringvliet_results[len(haringvliet_results) - 1 - i]['velocity']
-            haringvliet_results_reversed.append(result)
-        haringvliet_results = haringvliet_results_reversed
+        # Flip Haringvliet x-coordinates (mirror across v2) - amplitude already correct from model
+        # The channel should extend to the RIGHT of v2, not left
+        if nieuwe_merwede_results and haringvliet_results:
+            v2_position = max([r['position'] for r in nieuwe_merwede_results])
+            haringvliet_results_flipped = []
+            for result in haringvliet_results:
+                result_flipped = result.copy()
+                # Mirror position across v2
+                distance_from_v2 = result['position'] - v2_position
+                result_flipped['position'] = v2_position - distance_from_v2
+                result_flipped['position_km'] = result_flipped['position'] / 1000
+                result_flipped['eta'] = result['eta']
+                result_flipped['velocity'] = result['velocity']
+                haringvliet_results_flipped.append(result_flipped)
+            # Reverse the order so they go from v2 outward
+            haringvliet_results = list(reversed(haringvliet_results_flipped))
         
         # Process results
         results = {
