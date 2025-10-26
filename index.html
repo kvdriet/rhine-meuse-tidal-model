@@ -1039,21 +1039,12 @@
                 if (apiName && animationData.data[apiName]) {
                     var channelData = animationData.data[apiName];
                     
-                    // Calculate eta(t) = amplitude * cos(t - phase) for each spatial point
-                    var waterLevels = [];
-                    for (var i = 0; i < channelData.amplitude.length; i++) {
-                        var eta_t = channelData.amplitude[i] * Math.cos(t - channelData.phase[i]);
-                        waterLevels.push(eta_t);
-                    }
-                    
-                    // Calculate average water level for this frame
-                    var avgLevel = waterLevels.reduce(function(sum, val) { 
-                        return sum + val; 
-                    }, 0) / waterLevels.length;
+                    // Calculate eta(t) = amplitude * cos(t - phase) for the channel
+                    var eta_t = channelData.amplitude * Math.cos(t - channelData.phase);
                     
                     // Map water level to visual properties
                     // Positive = high tide (thicker, brighter), Negative = low tide (thinner, dimmer)
-                    var normalized = (avgLevel + 1) / 2; // Normalize to 0-1 range (assuming max amp ~1m)
+                    var normalized = (eta_t + 1) / 2; // Normalize to 0-1 range (assuming max amp ~1m)
                     var baseWeight = ch.data.weight || 5;
                     var newWeight = baseWeight + (normalized * 8); // Vary from base to base+8
                     var opacity = 0.5 + (normalized * 0.5); // Vary from 0.5 to 1.0

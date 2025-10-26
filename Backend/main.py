@@ -293,39 +293,37 @@ def run_tidal_model(params: ModelParameters):
                 result['position'] = -result['position']
                 result['position_km'] = -result['position_km']
         
-        # Calculate time-series data for animation (OPTIMIZED for memory)
-        # Instead of sending all time values, send only amplitude & phase
-        # Frontend will calculate: eta(t) = amplitude * cos(t - phase)
-        
-        # Stack all eta0 outputs: [NW, HK, HV_reversed, NM, NE, OM, WL]
-        eta0_all = np.column_stack((
-            model.eta0_ocean[:, 0],  # NW
-            model.eta0_ocean[:, 1],  # HK
-            model.eta0_river[:, 1][::-1],  # HV (reversed)
-            model.eta0_middle[:, 0],  # NM
-            model.eta0_middle[:, 1],  # NE
-            model.eta0_middle[:, 2],  # OM
-            model.eta0_river[:, 0]   # WL
-        ))
-        
-        # OPTIMIZATION: Use only every 10th spatial point to reduce data
-        # 500 points -> 50 points = 10x reduction
-        downsample_factor = 10
-        eta0_downsampled = eta0_all[::downsample_factor, :]
-        
-        # Send amplitude and phase for each channel (much smaller than full time series)
+        # ULTRA-LIGHTWEIGHT animation: Send only channel-average amplitude & phase
+        # Frontend will animate based on average water level per channel
         time_series = {}
         channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'haringvliet', 
                         'nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal']
         
-        for ch_idx, ch_name in enumerate(channel_names):
-            # Extract amplitude and phase for this channel
-            amplitudes = np.abs(eta0_downsampled[:, ch_idx])
-            phases = np.angle(eta0_downsampled[:, ch_idx])
+        # Map to model outputs
+        channel_data_map = {
+            'nieuwe_waterweg': (model.eta0_o, 0),
+            'hartelkanaal': (model.eta0_o, 1),
+            'nieuwe_maas': (model.eta0_m, 0),
+            'nieuwe_merwede': (model.eta0_m, 1),
+            'oude_maas': (model.eta0_m, 2),
+            'haringvliet': (model.eta0_r, 1),
+            'waal': (model.eta0_r, 0)
+        }
+        
+        for ch_name in channel_names:
+            eta_array, branch_idx = channel_data_map[ch_name]
+            # Get channel data (just the branch)
+            if eta_array.ndim > 1:
+                eta_channel = eta_array[:, branch_idx]
+            else:
+                eta_channel = eta_array
+            
+            # Calculate average amplitude and phase for the entire channel
+            avg_complex = np.mean(eta_channel)
             
             time_series[ch_name] = {
-                'amplitude': amplitudes.tolist(),  # ~50 values
-                'phase': phases.tolist()            # ~50 values
+                'amplitude': float(np.abs(avg_complex)),
+                'phase': float(np.angle(avg_complex))
             }
         
         # Process results
