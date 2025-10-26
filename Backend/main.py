@@ -258,17 +258,6 @@ def run_tidal_model(params: ModelParameters):
                                                     branch_index=2, reverse_x=True,
                                                     x_offset=-C * 1000)
         
-        # Calculate ocean endpoint position
-        if nieuwe_waterweg_results:
-            ocean_end_pos = max([r['position'] for r in nieuwe_waterweg_results + hartelkanaal_results])
-            # Shift Oude Maas to start at ocean endpoint
-            if oude_maas_results:
-                oude_maas_start = oude_maas_results[0]['position']
-                shift = ocean_end_pos - oude_maas_start
-                for result in oude_maas_results:
-                    result['position'] += shift
-                    result['position_km'] += shift / 1000
-        
         # Negate for natural geography
         for result in nieuwe_maas_results:
             result['position'] = -result['position']
@@ -280,16 +269,28 @@ def run_tidal_model(params: ModelParameters):
             result['position'] = -result['position']
             result['position_km'] = -result['position_km']
         
+        # NOW align Oude Maas with ocean endpoint (after coordinate negation)
+        if nieuwe_waterweg_results and hartelkanaal_results and oude_maas_results:
+            # Ocean channels end at their maximum position (rightmost point)
+            ocean_end_pos = max([r['position'] for r in nieuwe_waterweg_results + hartelkanaal_results])
+            # Oude Maas should start where ocean ends
+            oude_maas_start = min([r['position'] for r in oude_maas_results])  # leftmost point of OM
+            shift = ocean_end_pos - oude_maas_start
+            for result in oude_maas_results:
+                result['position'] += shift
+                result['position_km'] += shift / 1000
+        
         # River channels (will appear on the RIGHT, positive x)
         waal_offset = (x_river_begin[0] + test[0] - C) * 1000
         waal_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
                                               branch_index=0, reverse_x=True, 
                                               x_offset=waal_offset)
         
-        # Haringvliet - REVERSE the amplitude array since flow is opposite
+        # Haringvliet - amplitude data needs to be in OPPOSITE direction
+        # Keep reverse_x=True but will reverse the final list
         haringvliet_offset = (x_river_begin[1] + test[1] - C) * 1000
         haringvliet_results = process_channel_results(model.eta0_r, model.u0_mean_r, model.x_r, 
-                                                     branch_index=1, reverse_x=False,  # Don't reverse
+                                                     branch_index=1, reverse_x=True,
                                                      x_offset=haringvliet_offset)
         
         # Negate for natural geography
@@ -299,7 +300,17 @@ def run_tidal_model(params: ModelParameters):
         for result in haringvliet_results:
             result['position'] = -result['position']
             result['position_km'] = -result['position_km']
-
+        
+        # Reverse haringvliet array order (flow is opposite direction)
+        # This makes the amplitude array go from right to left instead of left to right
+        haringvliet_results_reversed = []
+        for i in range(len(haringvliet_results)):
+            result = haringvliet_results[i].copy()
+            # Keep position from one end but amplitude from other end
+            result['eta'] = haringvliet_results[len(haringvliet_results) - 1 - i]['eta']
+            result['velocity'] = haringvliet_results[len(haringvliet_results) - 1 - i]['velocity']
+            haringvliet_results_reversed.append(result)
+        haringvliet_results = haringvliet_results_reversed
         
         # Process results
         results = {
