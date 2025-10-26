@@ -1029,17 +1029,27 @@
             document.getElementById('timeDisplay').textContent = 
                 'Time: ' + hours + ':' + (minutes < 10 ? '0' : '') + minutes;
             
+            // Calculate current phase in the cycle (0 to 2π)
+            var t = (frameIndex / animationData.num_frames) * 2 * Math.PI;
+            
             // Update each channel visualization
             channelLayers.forEach(function(ch) {
                 var apiName = channelMapping[ch.name];
                 
                 if (apiName && animationData.data[apiName]) {
-                    var channelTimeData = animationData.data[apiName][frameIndex];
+                    var channelData = animationData.data[apiName];
+                    
+                    // Calculate eta(t) = amplitude * cos(t - phase) for each spatial point
+                    var waterLevels = [];
+                    for (var i = 0; i < channelData.amplitude.length; i++) {
+                        var eta_t = channelData.amplitude[i] * Math.cos(t - channelData.phase[i]);
+                        waterLevels.push(eta_t);
+                    }
                     
                     // Calculate average water level for this frame
-                    var avgLevel = channelTimeData.reduce(function(sum, val) { 
+                    var avgLevel = waterLevels.reduce(function(sum, val) { 
                         return sum + val; 
-                    }, 0) / channelTimeData.length;
+                    }, 0) / waterLevels.length;
                     
                     // Map water level to visual properties
                     // Positive = high tide (thicker, brighter), Negative = low tide (thinner, dimmer)

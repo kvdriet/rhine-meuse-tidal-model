@@ -293,9 +293,11 @@ def run_tidal_model(params: ModelParameters):
                 result['position'] = -result['position']
                 result['position_km'] = -result['position_km']
         
-        # Calculate time-series data for animation (matching your Python code)
+        # Calculate time-series data for animation (OPTIMIZED for memory)
+        # Instead of sending all time values, send only amplitude & phase
+        # Frontend will calculate: eta(t) = amplitude * cos(t - phase)
+        
         # Stack all eta0 outputs: [NW, HK, HV_reversed, NM, NE, OM, WL]
-        # Note: Since ocean is now on left, we reverse the stacking order
         eta0_all = np.column_stack((
             model.eta0_ocean[:, 0],  # NW
             model.eta0_ocean[:, 1],  # HK
@@ -306,31 +308,25 @@ def run_tidal_model(params: ModelParameters):
             model.eta0_river[:, 0]   # WL
         ))
         
-        # Time array (2π for one full cycle)
-        t = model.t  # Already defined in model as np.linspace(0, 2*np.pi, N_t)
-        N_spatial = len(model.eta0_ocean)
-        N_time = len(t)
+        # OPTIMIZATION: Use only every 10th spatial point to reduce data
+        # 500 points -> 50 points = 10x reduction
+        downsample_factor = 10
+        eta0_downsampled = eta0_all[::downsample_factor, :]
         
-        # Calculate eta for all positions and times: eta(x,t) = |eta0| * cos(ωt - φ)
-        # We'll store a simplified version: just key time steps for animation
-        time_steps = 24  # Number of animation frames (every ~30 minutes for 12.4 hour period)
-        time_indices = np.linspace(0, N_time - 1, time_steps, dtype=int)
-        
+        # Send amplitude and phase for each channel (much smaller than full time series)
         time_series = {}
         channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'haringvliet', 
                         'nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal']
         
         for ch_idx, ch_name in enumerate(channel_names):
-            time_series[ch_name] = []
-            for t_idx in time_indices:
-                time_frame = []
-                for spatial_idx in range(N_spatial):
-                    # eta(x,t) = |eta0| * cos(t - angle(eta0))
-                    amplitude = abs(eta0_all[spatial_idx, ch_idx])
-                    phase = np.angle(eta0_all[spatial_idx, ch_idx])
-                    eta_t = amplitude * np.cos(t[t_idx] - phase)
-                    time_frame.append(float(eta_t))
-                time_series[ch_name].append(time_frame)
+            # Extract amplitude and phase for this channel
+            amplitudes = np.abs(eta0_downsampled[:, ch_idx])
+            phases = np.angle(eta0_downsampled[:, ch_idx])
+            
+            time_series[ch_name] = {
+                'amplitude': amplitudes.tolist(),  # ~50 values
+                'phase': phases.tolist()            # ~50 values
+            }
         
         # Process results
         results = {
@@ -362,9 +358,10 @@ def run_tidal_model(params: ModelParameters):
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
             "time_series": {
                 "data": time_series,
-                "num_frames": time_steps,
+                "num_frames": 24,  # Frontend will generate 24 frames
                 "period_hours": 12.42,  # M2 tide period
-                "description": "Water level (m) at each spatial point for each time frame"
+                "format": "amplitude_phase",  # Optimized: send amplitude & phase, not all time values
+                "description": "Amplitude and phase arrays for each channel (frontend calculates time series)"
             }
         }
         
