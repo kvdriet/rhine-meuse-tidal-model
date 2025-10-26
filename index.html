@@ -558,18 +558,35 @@
         </div>
         <div class="speed-control">
             <label>Animation Speed:</label>
-            <input type="range" id="speedSlider" min="1" max="15" step="1" value="5" 
+            <input type="range" id="speedSlider" min="1" max="30" step="1" value="10" 
                    oninput="updateAnimationSpeed(this.value)">
             <div style="text-align: center; color: #38bdf8; margin-top: 5px;">
-                <span id="speedValue">5</span>x
+                <span id="speedValue">10</span>x
+            </div>
+        </div>
+        <div class="speed-control" style="margin-top: 20px;">
+            <label>Tidal Component:</label>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="tideComponent" value="m2" checked onchange="switchTidalComponent(this.value)">
+                    <span style="font-size: 13px;">M₂ (Principal Lunar)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="tideComponent" value="m4" onchange="switchTidalComponent(this.value)">
+                    <span style="font-size: 13px;">M₄ (Overtide)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="tideComponent" value="ratio" onchange="switchTidalComponent(this.value)">
+                    <span style="font-size: 13px;">M₄/M₂ Ratio</span>
+                </label>
             </div>
         </div>
         <div class="color-legend">
-            <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;">M₂ Elevation:</label>
+            <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;" id="colorLegendLabel">M₂ Elevation:</label>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 11px; color: #94a3b8;">Low</span>
-                <div style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
-                <span style="font-size: 11px; color: #94a3b8;">High</span>
+                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMin">Low</span>
+                <div id="colorLegendGradient" style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
+                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMax">High</span>
             </div>
         </div>
     </div>
@@ -986,9 +1003,12 @@
         
         // Animation state
         var animationData = null;
+        var animationData_m4 = null;
+        var animationData_ratio = null;
+        var currentTidalComponent = 'm2'; // 'm2', 'm4', or 'ratio'
         var animationInterval = null;
         var currentFrame = 0;
-        var animationSpeed = 5; // frames per second (default 5 FPS for 60 frames)
+        var animationSpeed = 10; // frames per second (default 10 FPS)
         var isPlaying = false;
         var scatterMarkers = []; // Store scatter point markers for animation
 
@@ -1041,6 +1061,43 @@
             currentFrame = 0;
         }
         
+        // Switch between M2, M4, and M4/M2 ratio
+        function switchTidalComponent(component) {
+            var wasPlaying = isPlaying;
+            if (wasPlaying) pauseAnimation();
+            
+            currentTidalComponent = component;
+            currentFrame = 0;
+            
+            // Update color legend
+            var label = document.getElementById('colorLegendLabel');
+            var minLabel = document.getElementById('colorLegendMin');
+            var maxLabel = document.getElementById('colorLegendMax');
+            var gradient = document.getElementById('colorLegendGradient');
+            
+            if (component === 'm2') {
+                label.textContent = 'M₂ Elevation:';
+                minLabel.textContent = 'Low';
+                maxLabel.textContent = 'High';
+                gradient.style.background = 'linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43))';
+            } else if (component === 'm4') {
+                label.textContent = 'M₄ Elevation:';
+                minLabel.textContent = 'Low';
+                maxLabel.textContent = 'High';
+                gradient.style.background = 'linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43))';
+            } else if (component === 'ratio') {
+                label.textContent = 'M₄/M₂ Ratio:';
+                minLabel.textContent = '0';
+                maxLabel.textContent = 'Max';
+                gradient.style.background = 'linear-gradient(to right, rgb(255,255,255), rgb(255,200,0), rgb(178,24,43))';
+            }
+            
+            // Update visualization to show new component
+            updateVisualization(currentFrame);
+            
+            if (wasPlaying) playAnimation();
+        }
+        
         // Restore original channel line visibility
         function restoreChannelLines() {
             channelLayers.forEach(function(ch) {
@@ -1053,7 +1110,7 @@
 
         function updateAnimationSpeed(value) {
             animationSpeed = parseFloat(value);
-            document.getElementById('speedValue').textContent = value;
+            document.getElementById('speedValue').textContent = (value / 10).toFixed(0); // Display as 1x, 2x, etc
             
             // Restart animation if playing
             if (isPlaying) {
@@ -1065,16 +1122,34 @@
         function updateVisualization(frameIndex) {
             if (!animationData || !channelLayers) return;
             
+            // Select data based on current component
+            var currentData, vmin, vmax, period_hours;
+            if (currentTidalComponent === 'm4' && animationData_m4) {
+                currentData = animationData_m4;
+                vmin = animationData_m4.global_min;
+                vmax = animationData_m4.global_max;
+                period_hours = animationData_m4.period_hours;
+            } else if (currentTidalComponent === 'ratio' && animationData_ratio) {
+                currentData = animationData_ratio;
+                vmin = animationData_ratio.global_min;
+                vmax = animationData_ratio.global_max;
+                period_hours = animationData.period_hours; // Use M2 period for display
+            } else {
+                currentData = animationData;
+                vmin = animationData.global_min;
+                vmax = animationData.global_max;
+                period_hours = animationData.period_hours;
+            }
+            
             // Calculate current time in the tidal cycle
-            var period_hours = animationData.period_hours;
-            var currentTime = (frameIndex / animationData.num_frames) * period_hours;
+            var currentTime = (frameIndex / 60) * period_hours;
             var hours = Math.floor(currentTime);
             var minutes = Math.floor((currentTime - hours) * 60);
             document.getElementById('timeDisplay').textContent = 
                 'Time: ' + hours + ':' + (minutes < 10 ? '0' : '') + minutes;
             
             // Calculate current phase in the cycle (0 to 2π)
-            var t = (frameIndex / animationData.num_frames) * 2 * Math.PI;
+            var t = (frameIndex / 60) * 2 * Math.PI;
             
             // Remove old scatter markers
             scatterMarkers.forEach(function(marker) {
@@ -1087,20 +1162,16 @@
                 ch.layer.setStyle({opacity: 0, fillOpacity: 0});
             });
             
-            // Global min/max for color scaling (like vmin/vmax in Python)
-            var vmin = animationData.global_min;
-            var vmax = animationData.global_max;
-            
-            // Channels that need reversal (ocean and middle channels - max amplitude at ocean side)
-            var channelsToReverse = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 'nieuwe_merwede', 'oude_maas'];
+            // ALL channels need reversal (max amplitude should be at ocean/sea side)
+            var channelsToReverse = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'haringvliet', 'waal'];
             
             // Create smooth gradient polylines for each channel
             channelLayers.forEach(function(ch) {
                 var apiName = channelMapping[ch.name];
                 var kmlKey = kmlMapping[ch.name];
                 
-                if (apiName && animationData.data[apiName]) {
-                    var channelData = animationData.data[apiName];
+                if (apiName && currentData.data[apiName]) {
+                    var channelData = currentData.data[apiName];
                     var kmlCoords = kmlData[kmlKey]; // Get coordinates for this channel
                     
                     if (!kmlCoords) {
@@ -1110,10 +1181,19 @@
                     
                     // Calculate water levels for all points
                     var waterLevels = [];
-                    channelData.points.forEach(function(point) {
-                        var eta_t = point.amplitude * Math.cos(t - point.phase);
-                        waterLevels.push(eta_t);
-                    });
+                    
+                    if (currentTidalComponent === 'ratio') {
+                        // For ratio, use the ratio value directly (no time variation)
+                        channelData.points.forEach(function(point) {
+                            waterLevels.push(point.ratio);
+                        });
+                    } else {
+                        // For M2 and M4, calculate eta(t) = amplitude * cos(t - phase)
+                        channelData.points.forEach(function(point) {
+                            var eta_t = point.amplitude * Math.cos(t - point.phase);
+                            waterLevels.push(eta_t);
+                        });
+                    }
                     
                     // Reverse water levels for ocean and middle channels (max at ocean side)
                     if (channelsToReverse.indexOf(apiName) !== -1) {
@@ -1143,8 +1223,13 @@
                         var normalized = (etaAvg - vmin) / (vmax - vmin);
                         normalized = Math.max(0, Math.min(1, normalized));
                         
-                        // Get RdBu_r color for this segment
-                        var color = getRdBuColor_r(normalized);
+                        // Get color based on component type
+                        var color;
+                        if (currentTidalComponent === 'ratio') {
+                            color = getViridisColor(normalized); // Yellow-Orange-Red for ratio
+                        } else {
+                            color = getRdBuColor_r(normalized); // RdBu_r for M2 and M4
+                        }
                         
                         // Create polyline segment (smooth line between two points)
                         var segment = L.polyline([coord1, coord2], {
@@ -1184,6 +1269,34 @@
             
             return 'rgb(' + r + ',' + g + ',' + b + ')';
         }
+        
+        // Viridis-like colormap for M4/M2 ratio (White → Yellow → Orange → Red)
+        function getViridisColor(normalized) {
+            // normalized: 0 = low ratio, 1 = high ratio
+            var r, g, b;
+            
+            if (normalized < 0.33) {
+                // Low: White to Yellow
+                var t = normalized / 0.33;
+                r = 255;
+                g = 255;
+                b = Math.round(255 * (1 - t));
+            } else if (normalized < 0.67) {
+                // Medium: Yellow to Orange
+                var t = (normalized - 0.33) / 0.34;
+                r = 255;
+                g = Math.round(255 - (55 * t));
+                b = 0;
+            } else {
+                // High: Orange to Red
+                var t = (normalized - 0.67) / 0.33;
+                r = Math.round(255 - (77 * t)); // 255 to 178
+                g = Math.round(200 - (176 * t)); // 200 to 24
+                b = Math.round(0 + (43 * t));    // 0 to 43
+            }
+            
+            return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
 
         // Hook into displayResults to activate animation panel when results are available
         var originalDisplayResults = displayResults;
@@ -1194,7 +1307,12 @@
             // Activate animation if time series data is available
             if (results.time_series) {
                 animationData = results.time_series;
+                animationData_m4 = results.time_series_m4 || null;
+                animationData_ratio = results.m4_m2_ratio || null;
+                
                 console.log('Animation data loaded:', animationData);
+                console.log('M4 data loaded:', animationData_m4 ? 'Yes' : 'No');
+                console.log('Ratio data loaded:', animationData_ratio ? 'Yes' : 'No');
                 console.log('Channels in data:', Object.keys(animationData.data || {}));
                 console.log('Sample channel data:', animationData.data ? animationData.data['nieuwe_waterweg'] : 'none');
                 document.getElementById('animationPanel').classList.add('visible');

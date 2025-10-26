@@ -231,7 +231,46 @@ def run_tidal_model(params: ModelParameters):
         # Run M2 tide calculation
         model.M2()
         
-        print("Model run complete, processing results...")
+        # Store M2 results
+        eta0_m2_river = model.eta0_r.copy()
+        eta0_m2_ocean = model.eta0_o.copy()
+        eta0_m2_middle = model.eta0_m.copy()
+        
+        # Run M4 tide calculation
+        model.M2(M4="yes")
+        
+        # Store M4 results
+        eta0_m4_river = model.eta0_r.copy()
+        eta0_m4_ocean = model.eta0_o.copy()
+        eta0_m4_middle = model.eta0_m.copy()
+        
+        # Calculate M4/M2 ratio
+        eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)  # Add small value to avoid division by zero
+        eta0_ratio_ocean = np.abs(eta0_m4_ocean) / (np.abs(eta0_m2_ocean) + 1e-10)
+        eta0_ratio_middle = np.abs(eta0_m4_middle) / (np.abs(eta0_m2_middle) + 1e-10)
+        
+        # Restore M2 results to model for main visualization
+        model.eta0_r = eta0_m2_river
+        model.eta0_o = eta0_m2_ocean
+        model.eta0_m = eta0_m2_middle
+
+        eta0_m2_ocean = model.eta0_o.copy()
+        eta0_m2_middle = model.eta0_m.copy()
+        
+        # Run M4 tide calculation
+        model.M2(M4="yes")
+        
+        # Store M4 results
+        eta0_m4_river = model.eta0_r.copy()
+        eta0_m4_ocean = model.eta0_o.copy()
+        eta0_m4_middle = model.eta0_m.copy()
+        
+        # Restore M2 for main results (backwards compatibility)
+        model.eta0_r = eta0_m2_river
+        model.eta0_o = eta0_m2_ocean
+        model.eta0_m = eta0_m2_middle
+        
+        print("Model run complete (M2 and M4), processing results...")
         
         # Using the working Python plotting logic (ocean right, river left), then flipping
         # This matches your original matplotlib code that works correctly
@@ -360,6 +399,82 @@ def run_tidal_model(params: ModelParameters):
         global_min = -max(all_amplitudes)  # For vmin (negative of max amplitude)
         global_max = max(all_amplitudes)   # For vmax
         
+        # Create M4 data (using stored M4 results)
+        time_series_m4 = {}
+        m4_channel_data_map = {
+            'nieuwe_waterweg': (eta0_m4_ocean, 0),
+            'hartelkanaal': (eta0_m4_ocean, 1),
+            'nieuwe_maas': (eta0_m4_middle, 0),
+            'nieuwe_merwede': (eta0_m4_middle, 1),
+            'oude_maas': (eta0_m4_middle, 2),
+            'haringvliet': (eta0_m4_river, 1),
+            'waal': (eta0_m4_river, 0)
+        }
+        
+        for ch_name in channel_names:
+            eta_array_m4, branch_idx = m4_channel_data_map[ch_name]
+            if eta_array_m4.ndim > 1:
+                eta_channel_m4 = eta_array_m4[:, branch_idx]
+            else:
+                eta_channel_m4 = eta_array_m4
+            
+            # Sample every downsample points
+            sampled_points_m4 = []
+            for i in range(0, len(eta_channel_m4), downsample):
+                eta_val_m4 = eta_channel_m4[i]
+                sampled_points_m4.append({
+                    'amplitude': float(np.abs(eta_val_m4)),
+                    'phase': float(np.angle(eta_val_m4)),
+                    'index': i
+                })
+            
+            time_series_m4[ch_name] = {
+                'points': sampled_points_m4,
+                'total_points': len(eta_channel_m4)
+            }
+        
+        # Calculate M4/M2 ratio for each channel
+        m4_m2_ratio = {}
+        for ch_name in channel_names:
+            # Get M2 and M4 amplitudes along channel
+            m2_amps = [p['amplitude'] for p in time_series[ch_name]['points']]
+            m4_amps = [p['amplitude'] for p in time_series_m4[ch_name]['points']]
+            
+            # Calculate ratio at each point
+            ratio_points = []
+            for i in range(len(m2_amps)):
+                if m2_amps[i] > 0.001:  # Avoid division by zero
+                    ratio = m4_amps[i] / m2_amps[i]
+                else:
+                    ratio = 0.0
+                ratio_points.append({
+                    'ratio': float(ratio),
+                    'index': time_series[ch_name]['points'][i]['index']
+                })
+            
+            m4_m2_ratio[ch_name] = {
+                'points': ratio_points,
+                'total_points': time_series[ch_name]['total_points']
+            }
+        
+        # Calculate global min/max for M4
+        all_amplitudes_m4 = []
+        for ch_name in channel_names:
+            for point in time_series_m4[ch_name]['points']:
+                all_amplitudes_m4.append(point['amplitude'])
+        
+        global_min_m4 = -max(all_amplitudes_m4)
+        global_max_m4 = max(all_amplitudes_m4)
+        
+        # Calculate global min/max for M4/M2 ratio
+        all_ratios = []
+        for ch_name in channel_names:
+            for point in m4_m2_ratio[ch_name]['points']:
+                all_ratios.append(point['ratio'])
+        
+        global_min_ratio = min(all_ratios) if all_ratios else 0
+        global_max_ratio = max(all_ratios) if all_ratios else 1
+        
         # Process results
         results = {
             "channels": {
@@ -396,6 +511,21 @@ def run_tidal_model(params: ModelParameters):
                 "global_min": float(global_min),  # For color scale (vmin)
                 "global_max": float(global_max),  # For color scale (vmax)
                 "description": "Spatial points along each channel with amplitude/phase (like Python scatter plot)"
+            },
+            "time_series_m4": {
+                "data": time_series_m4,
+                "num_frames": 60,
+                "period_hours": 6.21,  # M4 tide period (half of M2)
+                "format": "spatial_points",
+                "global_min": float(global_min_m4),
+                "global_max": float(global_max_m4),
+                "description": "M4 tidal component"
+            },
+            "m4_m2_ratio": {
+                "data": m4_m2_ratio,
+                "global_min": float(global_min_ratio),
+                "global_max": float(global_max_ratio),
+                "description": "M4/M2 amplitude ratio showing non-linear effects"
             }
         }
         
