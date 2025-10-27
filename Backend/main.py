@@ -536,32 +536,35 @@ def run_tidal_model(params: ModelParameters):
             },
             "velocity_structure": {
                 "ocean": {
-                    "u0": model.u0_o.tolist() if hasattr(model, 'u0_o') else None,
-                    "x": model.x_o.tolist(),
-                    "z": model.z_o.tolist(),
+                    "u0": model.u0_o[::2, ::2, :].tolist() if hasattr(model, 'u0_o') else None,  # Downsample 2x
+                    "x": model.x_o[::2, :].tolist() if model.x_o.ndim > 1 else model.x_o[::2].tolist(),
+                    "z": model.z_o[::2, :].tolist() if model.z_o.ndim > 1 else model.z_o[::2].tolist(),
                     "channels": ["nieuwe_waterweg", "hartelkanaal"]
                 },
                 "middle": {
-                    "u0": model.u0_m.tolist() if hasattr(model, 'u0_m') else None,
-                    "x": model.x_m.tolist(),
-                    "z": model.z_m.tolist(),
+                    "u0": model.u0_m[::2, ::2, :].tolist() if hasattr(model, 'u0_m') else None,  # Downsample 2x
+                    "x": model.x_m[::2, :].tolist() if model.x_m.ndim > 1 else model.x_m[::2].tolist(),
+                    "z": model.z_m[::2, :].tolist() if model.z_m.ndim > 1 else model.z_m[::2].tolist(),
                     "channels": ["nieuwe_maas", "nieuwe_merwede", "oude_maas"]
                 },
                 "river": {
-                    "u0": model.u0_r.tolist() if hasattr(model, 'u0_r') else None,
-                    "x": model.x_r.tolist(),
-                    "z": model.z_r.tolist(),
+                    "u0": model.u0_r[::2, ::2, :].tolist() if hasattr(model, 'u0_r') else None,  # Downsample 2x
+                    "x": model.x_r[::2, :].tolist() if model.x_r.ndim > 1 else model.x_r[::2].tolist(),
+                    "z": model.z_r[::2, :].tolist() if model.z_r.ndim > 1 else model.z_r[::2].tolist(),
                     "channels": ["waal", "haringvliet"]
                 },
-                "description": "3D velocity structure (depth × position × channel) for M2 tide"
+                "description": "3D velocity structure (50×50 downsampled from 100×100) for M2 tide"
             }
         }
         
         print("Results processed successfully for all 7 channels with time series and velocity structure")
+        print(f"Velocity structure sizes: ocean={len(results['velocity_structure']['ocean']['u0']) if results['velocity_structure']['ocean']['u0'] else 0}, " +
+              f"middle={len(results['velocity_structure']['middle']['u0']) if results['velocity_structure']['middle']['u0'] else 0}, " +
+              f"river={len(results['velocity_structure']['river']['u0']) if results['velocity_structure']['river']['u0'] else 0}")
         return results
         
     except Exception as e:
-        print(f"Error in model execution: {str(e)}")
+        print(f"ERROR in run_model: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Model execution failed: {str(e)}")
