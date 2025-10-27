@@ -879,11 +879,8 @@
             for (var i = 0; i < nz; i++) {
                 u_2d[i] = [];
                 for (var j = 0; j < nx; j++) {
-                    var u_complex = u0_3d[i][j][chanInfo.index];
-                    // Compute amplitude
-                    var real = u_complex.real || u_complex[0] || 0;
-                    var imag = u_complex.imag || u_complex[1] || 0;
-                    u_2d[i][j] = Math.sqrt(real*real + imag*imag);
+                    // u0_3d now contains amplitudes directly (not complex numbers)
+                    u_2d[i][j] = u0_3d[i][j][chanInfo.index];
                 }
             }
             

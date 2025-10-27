@@ -71,6 +71,13 @@ def complex_to_dict(z):
     return {'real': float(z.real), 'imag': float(z.imag), 
             'amplitude': float(abs(z)), 'phase': float(np.angle(z))}
 
+def complex_array_to_amplitude(arr):
+    """Convert 3D complex array to 3D amplitude array (JSON-safe)"""
+    if arr is None:
+        return None
+    # Convert complex to amplitude (magnitude)
+    return np.abs(arr).tolist()
+
 def process_channel_results(eta, u, x, branch_index=0, reverse_x=False, x_offset=0):
     """
     Extract results for a specific channel branch
@@ -536,24 +543,24 @@ def run_tidal_model(params: ModelParameters):
             },
             "velocity_structure": {
                 "ocean": {
-                    "u0": model.u0_o[::2, ::2, :].tolist() if hasattr(model, 'u0_o') else None,  # Downsample 2x
+                    "u0": complex_array_to_amplitude(model.u0_o[::2, ::2, :]) if hasattr(model, 'u0_o') else None,
                     "x": model.x_o[::2, :].tolist() if model.x_o.ndim > 1 else model.x_o[::2].tolist(),
                     "z": model.z_o[::2, :].tolist() if model.z_o.ndim > 1 else model.z_o[::2].tolist(),
                     "channels": ["nieuwe_waterweg", "hartelkanaal"]
                 },
                 "middle": {
-                    "u0": model.u0_m[::2, ::2, :].tolist() if hasattr(model, 'u0_m') else None,  # Downsample 2x
+                    "u0": complex_array_to_amplitude(model.u0_m[::2, ::2, :]) if hasattr(model, 'u0_m') else None,
                     "x": model.x_m[::2, :].tolist() if model.x_m.ndim > 1 else model.x_m[::2].tolist(),
                     "z": model.z_m[::2, :].tolist() if model.z_m.ndim > 1 else model.z_m[::2].tolist(),
                     "channels": ["nieuwe_maas", "nieuwe_merwede", "oude_maas"]
                 },
                 "river": {
-                    "u0": model.u0_r[::2, ::2, :].tolist() if hasattr(model, 'u0_r') else None,  # Downsample 2x
+                    "u0": complex_array_to_amplitude(model.u0_r[::2, ::2, :]) if hasattr(model, 'u0_r') else None,
                     "x": model.x_r[::2, :].tolist() if model.x_r.ndim > 1 else model.x_r[::2].tolist(),
                     "z": model.z_r[::2, :].tolist() if model.z_r.ndim > 1 else model.z_r[::2].tolist(),
                     "channels": ["waal", "haringvliet"]
                 },
-                "description": "3D velocity structure (50×50 downsampled from 100×100) for M2 tide"
+                "description": "3D velocity amplitude (50×50 downsampled) in m/s for M2 tide"
             }
         }
         
