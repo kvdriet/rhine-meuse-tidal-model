@@ -533,10 +533,31 @@ def run_tidal_model(params: ModelParameters):
                 "global_min": float(global_min_ratio),
                 "global_max": float(global_max_ratio),
                 "description": "M4/M2 amplitude ratio showing non-linear effects"
+            },
+            "velocity_structure": {
+                "ocean": {
+                    "u0": model.u0_o.tolist() if hasattr(model, 'u0_o') else None,
+                    "x": model.x_o.tolist(),
+                    "z": model.z_o.tolist(),
+                    "channels": ["nieuwe_waterweg", "hartelkanaal"]
+                },
+                "middle": {
+                    "u0": model.u0_m.tolist() if hasattr(model, 'u0_m') else None,
+                    "x": model.x_m.tolist(),
+                    "z": model.z_m.tolist(),
+                    "channels": ["nieuwe_maas", "nieuwe_merwede", "oude_maas"]
+                },
+                "river": {
+                    "u0": model.u0_r.tolist() if hasattr(model, 'u0_r') else None,
+                    "x": model.x_r.tolist(),
+                    "z": model.z_r.tolist(),
+                    "channels": ["waal", "haringvliet"]
+                },
+                "description": "3D velocity structure (depth × position × channel) for M2 tide"
             }
         }
         
-        print("Results processed successfully for all 7 channels with time series")
+        print("Results processed successfully for all 7 channels with time series and velocity structure")
         return results
         
     except Exception as e:
