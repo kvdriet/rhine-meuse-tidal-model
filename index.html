@@ -530,12 +530,33 @@
             <span class="result-value" id="viscosityVal">-</span>
         </div>
         <button class="view-graph-btn" onclick="showAmplitudeGraph()">📈 View Amplitude Graph</button>
+        <button class="view-graph-btn" onclick="showVelocityStructure()" style="margin-top: 10px;">🌀 View Velocity Structure</button>
     </div>
     
     <div class="amplitude-graph" id="amplitudeGraph">
         <button class="close-graph" onclick="closeAmplitudeGraph()">×</button>
-        <h3>M₂ Tidal Amplitude Along Network</h3>
+        <h3 id="graphTitle">M₂ Tidal Amplitude Along Network</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px; justify-content: center;">
+            <button class="animation-btn" onclick="showGraphComponent('m2')" id="graphM2Btn" style="background: rgba(56, 189, 248, 0.3); padding: 8px 16px;">M₂</button>
+            <button class="animation-btn" onclick="showGraphComponent('m4')" id="graphM4Btn" style="padding: 8px 16px;">M₄</button>
+            <button class="animation-btn" onclick="showGraphComponent('ratio')" id="graphRatioBtn" style="padding: 8px 16px;">M₄/M₂ Ratio</button>
+        </div>
         <canvas id="amplitudeCanvas" width="800" height="450"></canvas>
+    </div>
+    
+    <div class="amplitude-graph" id="velocityStructure" style="width: 900px;">
+        <button class="close-graph" onclick="closeVelocityStructure()">×</button>
+        <h3>M₂ Velocity Structure (Depth × Position)</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap;">
+            <button class="animation-btn" onclick="showVelocityChannel('nieuwe_waterweg')" id="velNWBtn" style="padding: 6px 12px; font-size: 12px;">Nieuwe Waterweg</button>
+            <button class="animation-btn" onclick="showVelocityChannel('hartelkanaal')" id="velHKBtn" style="padding: 6px 12px; font-size: 12px;">Hartelkanaal</button>
+            <button class="animation-btn" onclick="showVelocityChannel('nieuwe_maas')" id="velNMBtn" style="padding: 6px 12px; font-size: 12px;">Nieuwe Maas</button>
+            <button class="animation-btn" onclick="showVelocityChannel('nieuwe_merwede')" id="velNEBtn" style="padding: 6px 12px; font-size: 12px;">Nieuwe Merwede</button>
+            <button class="animation-btn" onclick="showVelocityChannel('oude_maas')" id="velOMBtn" style="padding: 6px 12px; font-size: 12px;">Oude Maas</button>
+            <button class="animation-btn" onclick="showVelocityChannel('waal')" id="velWLBtn" style="padding: 6px 12px; font-size: 12px;">Waal</button>
+            <button class="animation-btn" onclick="showVelocityChannel('haringvliet')" id="velHVBtn" style="padding: 6px 12px; font-size: 12px;">Haringvliet</button>
+        </div>
+        <canvas id="velocityCanvas" width="850" height="500"></canvas>
     </div>
     
     <div class="legend">
@@ -750,6 +771,7 @@
         };
         
         var currentResults = null; // Store results for graph
+        var currentGraphComponent = 'm2'; // 'm2', 'm4', or 'ratio'
         
         function showAmplitudeGraph() {
             if (currentResults) {
@@ -760,6 +782,244 @@
         
         function closeAmplitudeGraph() {
             document.getElementById('amplitudeGraph').classList.remove('visible');
+        }
+        
+        var currentVelocityChannel = 'nieuwe_waterweg';
+        
+        function showVelocityStructure() {
+            if (currentResults && currentResults.velocity_structure) {
+                document.getElementById('velocityStructure').classList.add('visible');
+                showVelocityChannel('nieuwe_waterweg');
+            } else {
+                alert('Velocity structure data not available. Run simulation first.');
+            }
+        }
+        
+        function closeVelocityStructure() {
+            document.getElementById('velocityStructure').classList.remove('visible');
+        }
+        
+        function showVelocityChannel(channelKey) {
+            currentVelocityChannel = channelKey;
+            
+            // Update button styles
+            ['NW', 'HK', 'NM', 'NE', 'OM', 'WL', 'HV'].forEach(function(btn) {
+                var btnEl = document.getElementById('vel' + btn + 'Btn');
+                if (btnEl) btnEl.style.background = 'transparent';
+            });
+            
+            var btnMap = {
+                'nieuwe_waterweg': 'NW',
+                'hartelkanaal': 'HK',
+                'nieuwe_maas': 'NM',
+                'nieuwe_merwede': 'NE',
+                'oude_maas': 'OM',
+                'waal': 'WL',
+                'haringvliet': 'HV'
+            };
+            
+            var activeBtn = document.getElementById('vel' + btnMap[channelKey] + 'Btn');
+            if (activeBtn) activeBtn.style.background = 'rgba(56, 189, 248, 0.3)';
+            
+            // Plot velocity structure
+            if (currentResults) {
+                plotVelocityStructure(currentResults, channelKey);
+            }
+        }
+        
+        function plotVelocityStructure(results, channelKey) {
+            var canvas = document.getElementById('velocityCanvas');
+            var ctx = canvas.getContext('2d');
+            var width = canvas.width;
+            var height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            var velData = results.velocity_structure;
+            if (!velData) {
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '16px Arial';
+                ctx.fillText('Velocity structure data not available', width/2 - 150, height/2);
+                return;
+            }
+            
+            // Determine which group (ocean, middle, river) and channel index
+            var groupData, channelIndex, channelName;
+            var channelMap = {
+                'nieuwe_waterweg': {group: 'ocean', index: 0, name: 'Nieuwe Waterweg'},
+                'hartelkanaal': {group: 'ocean', index: 1, name: 'Hartelkanaal'},
+                'nieuwe_maas': {group: 'middle', index: 0, name: 'Nieuwe Maas'},
+                'nieuwe_merwede': {group: 'middle', index: 1, name: 'Nieuwe Merwede'},
+                'oude_maas': {group: 'middle', index: 2, name: 'Oude Maas'},
+                'waal': {group: 'river', index: 0, name: 'Waal'},
+                'haringvliet': {group: 'river', index: 1, name: 'Haringvliet'}
+            };
+            
+            var chanInfo = channelMap[channelKey];
+            if (!chanInfo) return;
+            
+            groupData = velData[chanInfo.group];
+            if (!groupData || !groupData.u0) {
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '16px Arial';
+                ctx.fillText('No velocity data for ' + chanInfo.name, width/2 - 100, height/2);
+                return;
+            }
+            
+            // Extract u0[depth, position, channel]
+            var u0_3d = groupData.u0;
+            var x = groupData.x;
+            var z = groupData.z;
+            
+            // Get 2D slice for this channel: u0[:, :, channelIndex]
+            var nz = z.length;
+            var nx = x[0] ? x[0].length : x.length;
+            var u_2d = [];
+            
+            for (var i = 0; i < nz; i++) {
+                u_2d[i] = [];
+                for (var j = 0; j < nx; j++) {
+                    var u_complex = u0_3d[i][j][chanInfo.index];
+                    // Compute amplitude
+                    var real = u_complex.real || u_complex[0] || 0;
+                    var imag = u_complex.imag || u_complex[1] || 0;
+                    u_2d[i][j] = Math.sqrt(real*real + imag*imag);
+                }
+            }
+            
+            // Get x and z coordinates (handle both 1D and 2D arrays)
+            var x_coords = x[0] ? x.map(function(row) { return row[0] / 1000; }) : x.map(function(v) { return v / 1000; });
+            var z_coords = z[0] ? z.map(function(row) { return row[0]; }) : z;
+            
+            // Find min/max for scaling
+            var maxU = 0;
+            var minX = Math.min.apply(null, x_coords);
+            var maxX = Math.max.apply(null, x_coords);
+            var minZ = Math.min.apply(null, z_coords);
+            var maxZ = Math.max.apply(null, z_coords);
+            
+            u_2d.forEach(function(row) {
+                row.forEach(function(val) {
+                    maxU = Math.max(maxU, val);
+                });
+            });
+            
+            var padding = {left: 70, right: 150, top: 50, bottom: 60};
+            var plotWidth = width - padding.left - padding.right;
+            var plotHeight = height - padding.top - padding.bottom;
+            
+            function scaleX(xval) {
+                return padding.left + ((xval - minX) / (maxX - minX)) * plotWidth;
+            }
+            
+            function scaleY(zval) {
+                return padding.top + (1 - (zval - minZ) / (maxZ - minZ)) * plotHeight;
+            }
+            
+            // Draw contour filled plot
+            var levels = 20;
+            for (var i = 0; i < nz - 1; i++) {
+                for (var j = 0; j < nx - 1; j++) {
+                    var u_avg = (u_2d[i][j] + u_2d[i+1][j] + u_2d[i][j+1] + u_2d[i+1][j+1]) / 4;
+                    var normalized = u_avg / maxU;
+                    
+                    // RdBu_r colormap
+                    var color = getRdBuColor_r(normalized);
+                    
+                    var x1 = scaleX(x_coords[j]);
+                    var x2 = scaleX(x_coords[j+1]);
+                    var y1 = scaleY(z_coords[i]);
+                    var y2 = scaleY(z_coords[i+1]);
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x1, y1, x2-x1, y2-y1);
+                }
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, height - padding.bottom);
+            ctx.lineTo(width - padding.right, height - padding.bottom);
+            ctx.stroke();
+            
+            // Axis labels
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Position (km)', width / 2, height - 15);
+            
+            ctx.save();
+            ctx.translate(20, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Depth (m)', 0, 0);
+            ctx.restore();
+            
+            // Title
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('M₂ Current Amplitude - ' + chanInfo.name, width / 2, 25);
+            
+            // Colorbar
+            var colorbarX = width - padding.right + 20;
+            var colorbarY = padding.top;
+            var colorbarWidth = 30;
+            var colorbarHeight = plotHeight;
+            
+            // Draw colorbar gradient
+            for (var i = 0; i < colorbarHeight; i++) {
+                var normalized = 1 - (i / colorbarHeight);
+                var color = getRdBuColor_r(normalized);
+                ctx.fillStyle = color;
+                ctx.fillRect(colorbarX, colorbarY + i, colorbarWidth, 1);
+            }
+            
+            // Colorbar border
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(colorbarX, colorbarY, colorbarWidth, colorbarHeight);
+            
+            // Colorbar labels
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(maxU.toFixed(3) + ' m/s', colorbarX + colorbarWidth + 5, colorbarY + 10);
+            ctx.fillText('0 m/s', colorbarX + colorbarWidth + 5, colorbarY + colorbarHeight - 5);
+            
+            // Colorbar title
+            ctx.save();
+            ctx.translate(colorbarX + colorbarWidth + 50, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Current Amplitude (m/s)', 0, 0);
+            ctx.restore();
+        }
+        
+        
+        function showGraphComponent(component) {
+            currentGraphComponent = component;
+            
+            // Update button styles
+            document.getElementById('graphM2Btn').style.background = component === 'm2' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
+            document.getElementById('graphM4Btn').style.background = component === 'm4' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
+            document.getElementById('graphRatioBtn').style.background = component === 'ratio' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
+            
+            // Update title
+            var title = document.getElementById('graphTitle');
+            if (component === 'm2') {
+                title.textContent = 'M₂ Tidal Amplitude Along Network';
+            } else if (component === 'm4') {
+                title.textContent = 'M₄ Internal Overtide Amplitude Along Network';
+            } else if (component === 'ratio') {
+                title.textContent = 'M₄/M₂ Ratio Along Network (Non-linearity Strength)';
+            }
+            
+            // Replot with new component
+            if (currentResults) {
+                plotAmplitudeGraph(currentResults);
+            }
         }
         
         function plotAmplitudeGraph(results) {
@@ -782,14 +1042,46 @@
                 {key: 'haringvliet', name: 'HV', color: '#008000'}
             ];
             
+            // Helper function to get data based on current component
+            function getAmplitudeData(channelKey) {
+                if (currentGraphComponent === 'm2') {
+                    return results.channels[channelKey];
+                } else if (currentGraphComponent === 'm4' && results.time_series_m4) {
+                    var m4Data = results.time_series_m4.data[channelKey];
+                    if (!m4Data) return null;
+                    
+                    // Convert to channel format with positions from M2
+                    return m4Data.points.map(function(pt, idx) {
+                        var m2Point = results.channels[channelKey][Math.floor(idx * results.channels[channelKey].length / m4Data.points.length)];
+                        return {
+                            position_km: m2Point ? m2Point.position_km : 0,
+                            eta: { amplitude: pt.amplitude }
+                        };
+                    });
+                } else if (currentGraphComponent === 'ratio' && results.m4_m2_ratio) {
+                    var ratioData = results.m4_m2_ratio.data[channelKey];
+                    if (!ratioData) return null;
+                    
+                    return ratioData.points.map(function(pt, idx) {
+                        var m2Point = results.channels[channelKey][Math.floor(idx * results.channels[channelKey].length / ratioData.points.length)];
+                        return {
+                            position_km: m2Point ? m2Point.position_km : 0,
+                            eta: { amplitude: pt.ratio }
+                        };
+                    });
+                }
+                return null;
+            }
+            
             // Find max amplitude and position range
             var maxAmp = 0;
             var minPos = Infinity;
             var maxPos = -Infinity;
             
             channelsToPlot.forEach(function(ch) {
-                if (results.channels[ch.key]) {
-                    results.channels[ch.key].forEach(function(pt) {
+                var data = getAmplitudeData(ch.key);
+                if (data) {
+                    data.forEach(function(pt) {
                         maxAmp = Math.max(maxAmp, pt.eta.amplitude);
                         var pos = pt.position_km || pt.position / 1000;
                         minPos = Math.min(minPos, pos);
@@ -873,14 +1165,16 @@
             ctx.save();
             ctx.translate(15, height / 2);
             ctx.rotate(-Math.PI / 2);
-            ctx.fillText('M₂ elevation amplitude (m)', 0, 0);
+            var yLabel = currentGraphComponent === 'm2' ? 'M₂ elevation amplitude (m)' : 
+                        currentGraphComponent === 'm4' ? 'M₄ elevation amplitude (m)' :
+                        'M₄/M₂ ratio';
+            ctx.fillText(yLabel, 0, 0);
             ctx.restore();
             
             // Plot each channel
             channelsToPlot.forEach(function(ch) {
-                if (results.channels[ch.key]) {
-                    var data = results.channels[ch.key];
-                    
+                var data = getAmplitudeData(ch.key);
+                if (data) {
                     ctx.strokeStyle = ch.color;
                     ctx.lineWidth = 3;
                     ctx.beginPath();
