@@ -872,27 +872,55 @@
             var z = groupData.z;
             
             console.log('Velocity structure:', {
+                u0_exists: !!u0_3d,
                 u0_shape: u0_3d ? [u0_3d.length, u0_3d[0] ? u0_3d[0].length : 0, u0_3d[0] && u0_3d[0][0] ? u0_3d[0][0].length : 0] : 'null',
                 x_length: x ? x.length : 0,
                 z_length: z ? z.length : 0,
-                channelIndex: chanInfo.index
+                channelIndex: chanInfo.index,
+                channelName: chanInfo.name
             });
+            
+            if (!u0_3d || u0_3d.length === 0) {
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '16px Arial';
+                ctx.fillText('Velocity array is empty', width/2 - 100, height/2);
+                return;
+            }
             
             // Get 2D slice for this channel: u0[:, :, channelIndex]
             var nz = z.length;
             var nx = x[0] ? x[0].length : x.length;
             var u_2d = [];
             
-            for (var i = 0; i < nz; i++) {
-                u_2d[i] = [];
-                for (var j = 0; j < nx; j++) {
-                    // u0_3d now contains amplitudes directly (not complex numbers)
-                    var val = u0_3d[i][j][chanInfo.index];
-                    if (i === 0 && j === 0) {
-                        console.log('First velocity value:', val);
+            console.log('Extracting velocity slice, nz=' + nz + ', nx=' + nx + ', channel=' + chanInfo.index);
+            
+            try {
+                for (var i = 0; i < nz; i++) {
+                    u_2d[i] = [];
+                    for (var j = 0; j < nx; j++) {
+                        // u0_3d now contains amplitudes directly (not complex numbers)
+                        if (!u0_3d[i] || !u0_3d[i][j]) {
+                            console.error('Missing data at i=' + i + ', j=' + j);
+                            u_2d[i][j] = 0;
+                            continue;
+                        }
+                        var val = u0_3d[i][j][chanInfo.index];
+                        if (val === undefined || val === null) {
+                            console.error('Undefined velocity at depth=' + i + ', pos=' + j + ', channel=' + chanInfo.index);
+                            val = 0;
+                        }
+                        if (i === 0 && j === 0) {
+                            console.log('First velocity value:', val);
+                        }
+                        u_2d[i][j] = val;
                     }
-                    u_2d[i][j] = val;
                 }
+            } catch (e) {
+                console.error('Error extracting velocity:', e);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '16px Arial';
+                ctx.fillText('Error extracting velocity data: ' + e.message, width/2 - 200, height/2);
+                return;
             }
             
             console.log('u_2d created, shape:', [u_2d.length, u_2d[0] ? u_2d[0].length : 0]);
@@ -1063,11 +1091,18 @@
                     console.log('M4 data for channel:', m4Data);
                     if (!m4Data) return null;
                     
+                    var m2Channel = results.channels[channelKey];
+                    if (!m2Channel || m2Channel.length === 0) return null;
+                    
                     // Convert to channel format with positions from M2
                     return m4Data.points.map(function(pt, idx) {
-                        var m2Point = results.channels[channelKey][Math.floor(idx * results.channels[channelKey].length / m4Data.points.length)];
+                        // Calculate position index in M2 data
+                        var m2Index = Math.floor(idx * m2Channel.length / m4Data.points.length);
+                        m2Index = Math.min(m2Index, m2Channel.length - 1);
+                        var m2Point = m2Channel[m2Index];
+                        
                         return {
-                            position_km: m2Point ? m2Point.position_km : 0,
+                            position_km: m2Point.position_km || m2Point.position / 1000,
                             eta: { amplitude: pt.amplitude }
                         };
                     });
@@ -1078,10 +1113,17 @@
                     console.log('Ratio data for channel:', ratioData);
                     if (!ratioData) return null;
                     
+                    var m2Channel = results.channels[channelKey];
+                    if (!m2Channel || m2Channel.length === 0) return null;
+                    
                     return ratioData.points.map(function(pt, idx) {
-                        var m2Point = results.channels[channelKey][Math.floor(idx * results.channels[channelKey].length / ratioData.points.length)];
+                        // Calculate position index in M2 data
+                        var m2Index = Math.floor(idx * m2Channel.length / ratioData.points.length);
+                        m2Index = Math.min(m2Index, m2Channel.length - 1);
+                        var m2Point = m2Channel[m2Index];
+                        
                         return {
-                            position_km: m2Point ? m2Point.position_km : 0,
+                            position_km: m2Point.position_km || m2Point.position / 1000,
                             eta: { amplitude: pt.ratio }
                         };
                     });
