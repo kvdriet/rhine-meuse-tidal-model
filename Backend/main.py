@@ -414,19 +414,22 @@ def run_tidal_model(params: ModelParameters):
         global_max = max(all_amplitudes)   # For vmax
         
         # Create M4 data (using stored M4 results)
+        # We need to use the same position data as M2 (from channel_results_map)
         time_series_m4 = {}
-        m4_channel_data_map = {
-            'nieuwe_waterweg': (eta0_m4_ocean, 0, model.x_o, 0),
-            'hartelkanaal': (eta0_m4_ocean, 1, model.x_o, 1),
-            'nieuwe_maas': (eta0_m4_middle, 0, model.x_m, 0),
-            'nieuwe_merwede': (eta0_m4_middle, 1, model.x_m, 1),
-            'oude_maas': (eta0_m4_middle, 2, model.x_m, 2),
-            'haringvliet': (eta0_m4_river, 1, model.x_r, 1),
-            'waal': (eta0_m4_river, 0, model.x_r, 0)
+        
+        # Map M4 eta arrays to channel names
+        m4_eta_map = {
+            'nieuwe_waterweg': (eta0_m4_ocean, 0),
+            'hartelkanaal': (eta0_m4_ocean, 1),
+            'nieuwe_maas': (eta0_m4_middle, 0),
+            'nieuwe_merwede': (eta0_m4_middle, 1),
+            'oude_maas': (eta0_m4_middle, 2),
+            'haringvliet': (eta0_m4_river, 1),
+            'waal': (eta0_m4_river, 0)
         }
         
         for ch_name in channel_names:
-            eta_array_m4, branch_idx, x_array, x_branch_idx = m4_channel_data_map[ch_name]
+            eta_array_m4, branch_idx = m4_eta_map[ch_name]
             
             # Extract eta data for this channel
             if eta_array_m4.ndim > 1:
@@ -434,21 +437,23 @@ def run_tidal_model(params: ModelParameters):
             else:
                 eta_channel_m4 = eta_array_m4
             
-            # Extract x coordinates for this channel
-            if x_array.ndim > 1:
-                x_channel = x_array[:, x_branch_idx]
-            else:
-                x_channel = x_array
+            # Use M2 channel data for positions (ensures consistency)
+            m2_channel_data = channel_results_map[ch_name]
             
-            # Sample every downsample points
+            # Sample every downsample points (matching M2)
             sampled_points_m4 = []
-            for i in range(0, len(eta_channel_m4), downsample):
-                eta_val_m4 = eta_channel_m4[i]
-                x_val = x_channel[i] if i < len(x_channel) else x_channel[-1]
+            for idx, i in enumerate(range(0, len(m2_channel_data), downsample)):
+                if i >= len(eta_channel_m4):
+                    # If M4 array is shorter, use last value
+                    eta_val_m4 = eta_channel_m4[-1]
+                else:
+                    eta_val_m4 = eta_channel_m4[i]
+                
+                m2_pt = m2_channel_data[i]
                 
                 sampled_points_m4.append({
-                    'position': float(x_val),
-                    'position_km': float(x_val / 1000),
+                    'position': m2_pt['position'],  # Use M2 position directly
+                    'position_km': m2_pt['position_km'],  # Use M2 position_km directly
                     'amplitude': float(np.abs(eta_val_m4)),
                     'phase': float(np.angle(eta_val_m4)),
                     'index': i
@@ -456,21 +461,28 @@ def run_tidal_model(params: ModelParameters):
             
             time_series_m4[ch_name] = {
                 'points': sampled_points_m4,
-                'total_points': len(eta_channel_m4)
+                'total_points': len(m2_channel_data)
             }
         
         # Calculate M4/M2 ratio for each channel
         m4_m2_ratio = {}
         for ch_name in channel_names:
-            # Get M2 and M4 data along channel
-            m2_points = time_series[ch_name]['points']
+            # Get M2 full channel data (has position) and M4 data
+            m2_full_data = channel_results_map[ch_name]
             m4_points = time_series_m4[ch_name]['points']
             
-            # Calculate ratio at each point
+            # We need to match M4 points with M2 data using downsampling
+            # M4 was sampled every 'downsample' points, so we do the same for M2
             ratio_points = []
-            for i in range(min(len(m2_points), len(m4_points))):
-                m2_amp = m2_points[i]['amplitude']
-                m4_amp = m4_points[i]['amplitude']
+            for idx, i in enumerate(range(0, len(m2_full_data), downsample)):
+                if idx >= len(m4_points):
+                    break
+                    
+                m2_pt = m2_full_data[i]
+                m4_pt = m4_points[idx]
+                
+                m2_amp = m2_pt['eta']['amplitude']
+                m4_amp = m4_pt['amplitude']
                 
                 if m2_amp > 0.001:  # Avoid division by zero
                     ratio = m4_amp / m2_amp
@@ -478,15 +490,15 @@ def run_tidal_model(params: ModelParameters):
                     ratio = 0.0
                     
                 ratio_points.append({
-                    'position': m2_points[i]['position'],
-                    'position_km': m2_points[i]['position_km'],
+                    'position': m2_pt['position'],
+                    'position_km': m2_pt['position_km'],
                     'ratio': float(ratio),
-                    'index': m2_points[i]['index']
+                    'index': i
                 })
             
             m4_m2_ratio[ch_name] = {
                 'points': ratio_points,
-                'total_points': time_series[ch_name]['total_points']
+                'total_points': len(m2_full_data)
             }
         
         # Calculate global min/max for M4
