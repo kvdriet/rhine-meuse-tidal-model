@@ -889,7 +889,7 @@
             
             // Get 2D slice for this channel: u0[:, :, channelIndex]
             var nz = z.length;
-            var nx = x[0] ? x[0].length : x.length;
+            var nx = x.length;  // x is now 1D
             var u_2d = [];
             
             console.log('Extracting velocity slice, nz=' + nz + ', nx=' + nx + ', channel=' + chanInfo.index);
@@ -925,9 +925,9 @@
             
             console.log('u_2d created, shape:', [u_2d.length, u_2d[0] ? u_2d[0].length : 0]);
             
-            // Get x and z coordinates (handle both 1D and 2D arrays)
-            var x_coords = x[0] ? x.map(function(row) { return row[0] / 1000; }) : x.map(function(v) { return v / 1000; });
-            var z_coords = z[0] ? z.map(function(row) { return row[0]; }) : z;
+            // Get x and z coordinates (already 1D from backend)
+            var x_coords = x.map(function(v) { return v / 1000; });  // Convert to km
+            var z_coords = z;  // Already in meters
             
             // Find min/max for scaling
             var maxU = 0;
@@ -1085,50 +1085,30 @@
                 if (currentGraphComponent === 'm2') {
                     return results.channels[channelKey];
                 } else if (currentGraphComponent === 'm4' && results.time_series_m4) {
-                    console.log('M4 data:', results.time_series_m4);
-                    console.log('Looking for channel:', channelKey);
                     var m4Data = results.time_series_m4.data[channelKey];
-                    console.log('M4 data for channel:', m4Data);
                     if (!m4Data) return null;
                     
-                    var m2Channel = results.channels[channelKey];
-                    if (!m2Channel || m2Channel.length === 0) return null;
-                    
-                    // Convert to channel format with positions from M2
-                    return m4Data.points.map(function(pt, idx) {
-                        // Calculate position index in M2 data
-                        var m2Index = Math.floor(idx * m2Channel.length / m4Data.points.length);
-                        m2Index = Math.min(m2Index, m2Channel.length - 1);
-                        var m2Point = m2Channel[m2Index];
-                        
+                    // M4 data now has position information directly
+                    return m4Data.points.map(function(pt) {
                         return {
-                            position_km: m2Point.position_km || m2Point.position / 1000,
+                            position_km: pt.position_km,
+                            position: pt.position,
                             eta: { amplitude: pt.amplitude }
                         };
                     });
                 } else if (currentGraphComponent === 'ratio' && results.m4_m2_ratio) {
-                    console.log('Ratio data:', results.m4_m2_ratio);
-                    console.log('Looking for channel:', channelKey);
                     var ratioData = results.m4_m2_ratio.data[channelKey];
-                    console.log('Ratio data for channel:', ratioData);
                     if (!ratioData) return null;
                     
-                    var m2Channel = results.channels[channelKey];
-                    if (!m2Channel || m2Channel.length === 0) return null;
-                    
-                    return ratioData.points.map(function(pt, idx) {
-                        // Calculate position index in M2 data
-                        var m2Index = Math.floor(idx * m2Channel.length / ratioData.points.length);
-                        m2Index = Math.min(m2Index, m2Channel.length - 1);
-                        var m2Point = m2Channel[m2Index];
-                        
+                    // Ratio data now has position information directly
+                    return ratioData.points.map(function(pt) {
                         return {
-                            position_km: m2Point.position_km || m2Point.position / 1000,
+                            position_km: pt.position_km,
+                            position: pt.position,
                             eta: { amplitude: pt.ratio }
                         };
                     });
                 }
-                console.log('No data for component:', currentGraphComponent);
                 return null;
             }
             

@@ -416,27 +416,39 @@ def run_tidal_model(params: ModelParameters):
         # Create M4 data (using stored M4 results)
         time_series_m4 = {}
         m4_channel_data_map = {
-            'nieuwe_waterweg': (eta0_m4_ocean, 0),
-            'hartelkanaal': (eta0_m4_ocean, 1),
-            'nieuwe_maas': (eta0_m4_middle, 0),
-            'nieuwe_merwede': (eta0_m4_middle, 1),
-            'oude_maas': (eta0_m4_middle, 2),
-            'haringvliet': (eta0_m4_river, 1),
-            'waal': (eta0_m4_river, 0)
+            'nieuwe_waterweg': (eta0_m4_ocean, 0, model.x_o, 0),
+            'hartelkanaal': (eta0_m4_ocean, 1, model.x_o, 1),
+            'nieuwe_maas': (eta0_m4_middle, 0, model.x_m, 0),
+            'nieuwe_merwede': (eta0_m4_middle, 1, model.x_m, 1),
+            'oude_maas': (eta0_m4_middle, 2, model.x_m, 2),
+            'haringvliet': (eta0_m4_river, 1, model.x_r, 1),
+            'waal': (eta0_m4_river, 0, model.x_r, 0)
         }
         
         for ch_name in channel_names:
-            eta_array_m4, branch_idx = m4_channel_data_map[ch_name]
+            eta_array_m4, branch_idx, x_array, x_branch_idx = m4_channel_data_map[ch_name]
+            
+            # Extract eta data for this channel
             if eta_array_m4.ndim > 1:
                 eta_channel_m4 = eta_array_m4[:, branch_idx]
             else:
                 eta_channel_m4 = eta_array_m4
             
+            # Extract x coordinates for this channel
+            if x_array.ndim > 1:
+                x_channel = x_array[:, x_branch_idx]
+            else:
+                x_channel = x_array
+            
             # Sample every downsample points
             sampled_points_m4 = []
             for i in range(0, len(eta_channel_m4), downsample):
                 eta_val_m4 = eta_channel_m4[i]
+                x_val = x_channel[i] if i < len(x_channel) else x_channel[-1]
+                
                 sampled_points_m4.append({
+                    'position': float(x_val),
+                    'position_km': float(x_val / 1000),
                     'amplitude': float(np.abs(eta_val_m4)),
                     'phase': float(np.angle(eta_val_m4)),
                     'index': i
@@ -450,20 +462,26 @@ def run_tidal_model(params: ModelParameters):
         # Calculate M4/M2 ratio for each channel
         m4_m2_ratio = {}
         for ch_name in channel_names:
-            # Get M2 and M4 amplitudes along channel
-            m2_amps = [p['amplitude'] for p in time_series[ch_name]['points']]
-            m4_amps = [p['amplitude'] for p in time_series_m4[ch_name]['points']]
+            # Get M2 and M4 data along channel
+            m2_points = time_series[ch_name]['points']
+            m4_points = time_series_m4[ch_name]['points']
             
             # Calculate ratio at each point
             ratio_points = []
-            for i in range(len(m2_amps)):
-                if m2_amps[i] > 0.001:  # Avoid division by zero
-                    ratio = m4_amps[i] / m2_amps[i]
+            for i in range(min(len(m2_points), len(m4_points))):
+                m2_amp = m2_points[i]['amplitude']
+                m4_amp = m4_points[i]['amplitude']
+                
+                if m2_amp > 0.001:  # Avoid division by zero
+                    ratio = m4_amp / m2_amp
                 else:
                     ratio = 0.0
+                    
                 ratio_points.append({
+                    'position': m2_points[i]['position'],
+                    'position_km': m2_points[i]['position_km'],
                     'ratio': float(ratio),
-                    'index': time_series[ch_name]['points'][i]['index']
+                    'index': m2_points[i]['index']
                 })
             
             m4_m2_ratio[ch_name] = {
@@ -544,20 +562,20 @@ def run_tidal_model(params: ModelParameters):
             "velocity_structure": {
                 "ocean": {
                     "u0": complex_array_to_amplitude(model.u0_o[::2, ::2, :]) if hasattr(model, 'u0_o') else None,
-                    "x": model.x_o[::2, :].tolist() if model.x_o.ndim > 1 else model.x_o[::2].tolist(),
-                    "z": model.z_o[::2, :].tolist() if model.z_o.ndim > 1 else model.z_o[::2].tolist(),
+                    "x": (model.x_o[::2, 0].tolist() if model.x_o.ndim > 1 else model.x_o[::2].tolist()) if hasattr(model, 'x_o') else None,
+                    "z": (model.z_o[::2, 0].tolist() if model.z_o.ndim > 1 else model.z_o[::2].tolist()) if hasattr(model, 'z_o') else None,
                     "channels": ["nieuwe_waterweg", "hartelkanaal"]
                 },
                 "middle": {
                     "u0": complex_array_to_amplitude(model.u0_m[::2, ::2, :]) if hasattr(model, 'u0_m') else None,
-                    "x": model.x_m[::2, :].tolist() if model.x_m.ndim > 1 else model.x_m[::2].tolist(),
-                    "z": model.z_m[::2, :].tolist() if model.z_m.ndim > 1 else model.z_m[::2].tolist(),
+                    "x": (model.x_m[::2, 0].tolist() if model.x_m.ndim > 1 else model.x_m[::2].tolist()) if hasattr(model, 'x_m') else None,
+                    "z": (model.z_m[::2, 0].tolist() if model.z_m.ndim > 1 else model.z_m[::2].tolist()) if hasattr(model, 'z_m') else None,
                     "channels": ["nieuwe_maas", "nieuwe_merwede", "oude_maas"]
                 },
                 "river": {
                     "u0": complex_array_to_amplitude(model.u0_r[::2, ::2, :]) if hasattr(model, 'u0_r') else None,
-                    "x": model.x_r[::2, :].tolist() if model.x_r.ndim > 1 else model.x_r[::2].tolist(),
-                    "z": model.z_r[::2, :].tolist() if model.z_r.ndim > 1 else model.z_r[::2].tolist(),
+                    "x": (model.x_r[::2, 0].tolist() if model.x_r.ndim > 1 else model.x_r[::2].tolist()) if hasattr(model, 'x_r') else None,
+                    "z": (model.z_r[::2, 0].tolist() if model.z_r.ndim > 1 else model.z_r[::2].tolist()) if hasattr(model, 'z_r') else None,
                     "channels": ["waal", "haringvliet"]
                 },
                 "description": "3D velocity amplitude (50×50 downsampled) in m/s for M2 tide"
