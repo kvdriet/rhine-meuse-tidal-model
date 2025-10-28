@@ -871,6 +871,13 @@
             var x = groupData.x;
             var z = groupData.z;
             
+            console.log('Velocity structure:', {
+                u0_shape: u0_3d ? [u0_3d.length, u0_3d[0] ? u0_3d[0].length : 0, u0_3d[0] && u0_3d[0][0] ? u0_3d[0][0].length : 0] : 'null',
+                x_length: x ? x.length : 0,
+                z_length: z ? z.length : 0,
+                channelIndex: chanInfo.index
+            });
+            
             // Get 2D slice for this channel: u0[:, :, channelIndex]
             var nz = z.length;
             var nx = x[0] ? x[0].length : x.length;
@@ -880,9 +887,15 @@
                 u_2d[i] = [];
                 for (var j = 0; j < nx; j++) {
                     // u0_3d now contains amplitudes directly (not complex numbers)
-                    u_2d[i][j] = u0_3d[i][j][chanInfo.index];
+                    var val = u0_3d[i][j][chanInfo.index];
+                    if (i === 0 && j === 0) {
+                        console.log('First velocity value:', val);
+                    }
+                    u_2d[i][j] = val;
                 }
             }
+            
+            console.log('u_2d created, shape:', [u_2d.length, u_2d[0] ? u_2d[0].length : 0]);
             
             // Get x and z coordinates (handle both 1D and 2D arrays)
             var x_coords = x[0] ? x.map(function(row) { return row[0] / 1000; }) : x.map(function(v) { return v / 1000; });
@@ -1044,7 +1057,10 @@
                 if (currentGraphComponent === 'm2') {
                     return results.channels[channelKey];
                 } else if (currentGraphComponent === 'm4' && results.time_series_m4) {
+                    console.log('M4 data:', results.time_series_m4);
+                    console.log('Looking for channel:', channelKey);
                     var m4Data = results.time_series_m4.data[channelKey];
+                    console.log('M4 data for channel:', m4Data);
                     if (!m4Data) return null;
                     
                     // Convert to channel format with positions from M2
@@ -1056,7 +1072,10 @@
                         };
                     });
                 } else if (currentGraphComponent === 'ratio' && results.m4_m2_ratio) {
+                    console.log('Ratio data:', results.m4_m2_ratio);
+                    console.log('Looking for channel:', channelKey);
                     var ratioData = results.m4_m2_ratio.data[channelKey];
+                    console.log('Ratio data for channel:', ratioData);
                     if (!ratioData) return null;
                     
                     return ratioData.points.map(function(pt, idx) {
@@ -1067,6 +1086,7 @@
                         };
                     });
                 }
+                console.log('No data for component:', currentGraphComponent);
                 return null;
             }
             
