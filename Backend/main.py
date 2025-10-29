@@ -218,8 +218,27 @@ def run_tidal_model(params: ModelParameters):
             model.Av_m = (Av * model.H_m)
             model.Av_o = (Av * model.H_o)
         
-        # Run the model
-        model.run()
+        # Run M2 tidal model
+        print("Running M2 calculations...")
+        model.M2()
+        
+        # Run M4 base calculations (sets up parameters)
+        print("Running M4 base calculations...")
+        model.M4()
+        
+        # Calculate individual M4 components (must be done before M4_total)
+        print("Calculating M4 components...")
+        model.stokes_M4()
+        model.no_stress_M4()
+        model.adv_M4()
+        
+        # Run M4 total calculations (sums all components and sets up eta14)
+        print("Running M4 total calculations...")
+        model.M4_total()
+        
+        # Create tides object for M4 breakdown access
+        # The model should now have all the necessary attributes including eta14_r, eta14_m, eta14_o
+        tides = model
         
         print("Model run complete, processing results...")
         
@@ -286,36 +305,28 @@ def run_tidal_model(params: ModelParameters):
         
         # M4 tidal component processing with breakdown
         print("Processing M4 component with breakdown...")
-        tides = model.tides
         
-        # Get M4 components - these return arrays matching the model grid structure
+        # M4_total() already calculated all components, they should be available as attributes
+        # Get the individual components
         try:
-            m4_advection = tides.adv_M4()
-            m4_no_stress = tides.no_stress_M4()
-            m4_stokes = tides.stokes_M4()
-            m4_total = tides.M4()  # Use M4() not M4_total()
+            # These were calculated by M4_total via M4_ext which calls the individual methods
+            m4_advection = (model.eta14_adv_o, model.eta14_adv_m, model.eta14_adv_r)
+            m4_no_stress = (model.eta14_no_stress_o, model.eta14_no_stress_m, model.eta14_no_stress_r)
+            m4_stokes = (model.eta14_stokes_o, model.eta14_stokes_m, model.eta14_stokes_r)
+            m4_total = (eta14_o, eta14_m, eta14_r)
+            print("Successfully extracted M4 components")
         except Exception as e:
             print(f"Warning: Could not extract all M4 components: {e}")
+            print("M4 breakdown may not be available")
             m4_advection = None
             m4_no_stress = None
             m4_stokes = None
-            m4_total = tides.M4()
+            m4_total = (eta14_o, eta14_m, eta14_r)
         
-        # Extract M4 for each region similar to M2
-        # Check if eta14 attributes exist
-        try:
-            eta14_o = tides.eta14_o if hasattr(tides, 'eta14_o') else model.eta14_o
-            eta14_m = tides.eta14_m if hasattr(tides, 'eta14_m') else model.eta14_m
-            eta14_r = tides.eta14_r if hasattr(tides, 'eta14_r') else model.eta14_r
-        except Exception as e:
-            print(f"Warning: Using fallback for eta14 extraction: {e}")
-            # Fallback: use M4() result and split by regions
-            m4_result = tides.M4()
-            if isinstance(m4_result, tuple):
-                eta14_o, eta14_m, eta14_r = m4_result
-            else:
-                # If M4() returns single array, we'll need to handle differently
-                eta14_o = eta14_m = eta14_r = m4_result
+        # Extract M4 for each region - M4_total() already set these as attributes
+        eta14_o = model.eta14_o
+        eta14_m = model.eta14_m
+        eta14_r = model.eta14_r
         
         # Process M4 for time series (downsampled for efficiency)
         downsample = 5
