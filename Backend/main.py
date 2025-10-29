@@ -197,8 +197,28 @@ def run_tidal_model(params: ModelParameters):
         
         print(f"Running model with Sf={Sf}, Av={Av}, depth_adj={depth_adj}")
         
-        # Initialize and run the model
-        model = Network_model_RM(Sf=Sf, Av=Av, depth_adjustment=depth_adj)
+        # Initialize the model
+        model = Network_model_RM(Sf=Sf, Av=Av)
+        
+        # Apply depth adjustment if non-zero
+        if depth_adj != 0:
+            print(f"Applying depth adjustment of {depth_adj}m to all channels")
+            # Adjust depth parameters
+            model.H_r = model.H_r + depth_adj
+            model.H_o = model.H_o + depth_adj
+            model.H_m = model.H_m + depth_adj
+            
+            # Recalculate z-grids with adjusted depths
+            model.z_r = np.linspace(-model.H_r, 0, model.N)
+            model.z_o = np.linspace(-model.H_o, 0, model.N)
+            model.z_m = np.linspace(-model.H_m, 0, model.N)
+            
+            # Recalculate viscosity with adjusted depths
+            model.Av_r = (Av * model.H_r)
+            model.Av_m = (Av * model.H_m)
+            model.Av_o = (Av * model.H_o)
+        
+        # Run the model
         model.run()
         
         print("Model run complete, processing results...")
