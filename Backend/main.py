@@ -190,171 +190,233 @@ def run_tidal_model(params: ModelParameters):
             Av = preset['Av']
             depth_adj = preset['depth_adj']
         else:
-            Sf = FRICTION_MAPPING.get(params.friction_level, 0.005)
-            Av = VISCOSITY_MAPPING.get(params.viscosity_level, 0.005)
+            # Use individual parameter selections
+            Sf = FRICTION_MAPPING.get(params.friction_level, FRICTION_MAPPING['baseline'])
+            Av = VISCOSITY_MAPPING.get(params.viscosity_level, VISCOSITY_MAPPING['baseline'])
             depth_adj = params.depth_adjustment
         
-        # Run M2 model
         print(f"Running model with Sf={Sf}, Av={Av}, depth_adj={depth_adj}")
-        model = Network_model_RM(Av=Av, Sf=Sf)
-        model.H_r = model.H_r + depth_adj
-        model.H_m = model.H_m + depth_adj
-        model.H_o = model.H_o + depth_adj
-        model.M2()
         
-        # Run M4 model
-        print("Running M4 model...")
-        model.M4_no_stress()
+        # Initialize and run the model
+        model = Network_model_RM(Sf=Sf, Av=Av, depth_adjustment=depth_adj)
+        model.run()
         
-        # Process results for all channels with correct topology
-        waal_results = process_channel_results(
-            model.eta0_r, model.u0_r, model.x_r,
-            branch_index=0, reverse_x=True, x_offset=0
-        )
+        print("Model run complete, processing results...")
         
-        haringvliet_results = process_channel_results(
-            model.eta0_r, model.u0_r, model.x_r,
-            branch_index=1, reverse_x=True, x_offset=0
-        )
+        # Get M2 tidal component results for each channel
+        # Ocean channels (Nieuwe Waterweg, Hartelkanaal)
+        nw_results = process_channel_results(model.eta0_o, model.u0_o, model.x_o, 
+                                            branch_index=0, reverse_x=True)
+        hk_results = process_channel_results(model.eta0_o, model.u0_o, model.x_o, 
+                                            branch_index=1, reverse_x=True)
         
-        nieuwe_maas_results = process_channel_results(
-            model.eta0_m, model.u0_m, model.x_m,
-            branch_index=0, reverse_x=True, x_offset=0
-        )
+        # Middle channels (Nieuwe Maas, Nieuwe Merwede, Oude Maas)
+        nm_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
+                                            branch_index=0, reverse_x=True)
+        ne_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
+                                            branch_index=1, reverse_x=True)
+        om_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
+                                            branch_index=2, reverse_x=True)
         
-        nieuwe_merwede_results = process_channel_results(
-            model.eta0_m, model.u0_m, model.x_m,
-            branch_index=1, reverse_x=True, x_offset=0
-        )
+        # River channels (Waal, Haringvliet)
+        wl_results = process_channel_results(model.eta0_r, model.u0_r, model.x_r, 
+                                            branch_index=0, reverse_x=True)
+        hv_results = process_channel_results(model.eta0_r, model.u0_r, model.x_r, 
+                                            branch_index=1, reverse_x=True)
         
-        oude_maas_results = process_channel_results(
-            model.eta0_m, model.u0_m, model.x_m,
-            branch_index=2, reverse_x=True, x_offset=0
-        )
-        
-        nieuwe_waterweg_results = process_channel_results(
-            model.eta0_o, model.u0_o, model.x_o,
-            branch_index=0, reverse_x=True, x_offset=0
-        )
-        
-        hartelkanaal_results = process_channel_results(
-            model.eta0_o, model.u0_o, model.x_o,
-            branch_index=1, reverse_x=True, x_offset=0
-        )
-        
-        # Map for easy lookup
+        # Channel names for consistent ordering
+        channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 
+                        'nieuwe_merwede', 'oude_maas', 'waal', 'haringvliet']
         channel_results_map = {
-            'waal': waal_results,
-            'haringvliet': haringvliet_results,
-            'nieuwe_maas': nieuwe_maas_results,
-            'nieuwe_merwede': nieuwe_merwede_results,
-            'oude_maas': oude_maas_results,
-            'nieuwe_waterweg': nieuwe_waterweg_results,
-            'hartelkanaal': hartelkanaal_results
+            'nieuwe_waterweg': nw_results,
+            'hartelkanaal': hk_results,
+            'nieuwe_maas': nm_results,
+            'nieuwe_merwede': ne_results,
+            'oude_maas': om_results,
+            'waal': wl_results,
+            'haringvliet': hv_results
         }
         
-        channel_names = list(channel_results_map.keys())
+        # Generate time series data for M2 animation
+        print("Generating M2 time series...")
+        num_frames = 60
+        time_steps = np.linspace(0, 2 * np.pi, num_frames)
         
-        # Process M2 time series
-        downsample = 10
         time_series = {}
-        for ch_name in channel_names:
-            channel_data = channel_results_map[ch_name]
-            sampled_points = []
-            for i in range(0, len(channel_data), downsample):
-                pt = channel_data[i]
-                sampled_points.append({
-                    'position': pt['position'],
-                    'position_km': pt['position_km'],
-                    'amplitude': pt['eta']['amplitude'],
-                    'phase': pt['eta']['phase'],
-                    'index': i
-                })
-            
-            time_series[ch_name] = {
-                'points': sampled_points,
-                'total_points': len(channel_data)
-            }
+        for ch_name, ch_data in channel_results_map.items():
+            frame_data = []
+            for t in time_steps:
+                points = []
+                for pt in ch_data:
+                    eta_complex = pt['eta']['real'] + 1j * pt['eta']['imag']
+                    eta_real = np.real(eta_complex * np.exp(1j * t))
+                    points.append({
+                        'position': pt['position'],
+                        'position_km': pt['position_km'],
+                        'eta': float(eta_real)
+                    })
+                frame_data.append(points)
+            time_series[ch_name] = frame_data
         
-        # Calculate global min/max for color scale
-        all_amplitudes = []
-        for ch_name in channel_names:
-            for point in time_series[ch_name]['points']:
-                all_amplitudes.append(point['amplitude'])
+        # Calculate global min/max for M2
+        all_values = [pt['eta'] for ch in time_series.values() 
+                     for frame in ch for pt in frame]
+        global_min = min(all_values)
+        global_max = max(all_values)
         
-        global_min = -max(all_amplitudes)
-        global_max = max(all_amplitudes)
+        # M4 tidal component processing with breakdown
+        print("Processing M4 component with breakdown...")
+        tides = model.tides
         
-        # Process M4 time series with component breakdown
-        print("Processing M4 component breakdown...")
+        # Get M4 components - these return arrays matching the model grid structure
+        try:
+            m4_advection = tides.adv_M4()
+            m4_no_stress = tides.no_stress_M4()
+            m4_stokes = tides.stokes_M4()
+            m4_total = tides.M4()  # Use M4() not M4_total()
+        except Exception as e:
+            print(f"Warning: Could not extract all M4 components: {e}")
+            m4_advection = None
+            m4_no_stress = None
+            m4_stokes = None
+            m4_total = tides.M4()
+        
+        # Extract M4 for each region similar to M2
+        # Check if eta14 attributes exist
+        try:
+            eta14_o = tides.eta14_o if hasattr(tides, 'eta14_o') else model.eta14_o
+            eta14_m = tides.eta14_m if hasattr(tides, 'eta14_m') else model.eta14_m
+            eta14_r = tides.eta14_r if hasattr(tides, 'eta14_r') else model.eta14_r
+        except Exception as e:
+            print(f"Warning: Using fallback for eta14 extraction: {e}")
+            # Fallback: use M4() result and split by regions
+            m4_result = tides.M4()
+            if isinstance(m4_result, tuple):
+                eta14_o, eta14_m, eta14_r = m4_result
+            else:
+                # If M4() returns single array, we'll need to handle differently
+                eta14_o = eta14_m = eta14_r = m4_result
+        
+        # Process M4 for time series (downsampled for efficiency)
+        downsample = 5
         time_series_m4 = {}
         m4_breakdown = {}
         
         for ch_name in channel_names:
             m2_channel_data = channel_results_map[ch_name]
-            
-            # Get M4 data from the model
-            if ch_name in ['nieuwe_waterweg', 'hartelkanaal']:
-                eta_m4_full = model.eta4_o
-                section = 'ocean'
-                branch_map = {'nieuwe_waterweg': 0, 'hartelkanaal': 1}
-                branch_idx = branch_map[ch_name]
-            elif ch_name in ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas']:
-                eta_m4_full = model.eta4_m
-                section = 'middle'
-                branch_map = {'nieuwe_maas': 0, 'nieuwe_merwede': 1, 'oude_maas': 2}
-                branch_idx = branch_map[ch_name]
-            else:  # river
-                eta_m4_full = model.eta4_r
-                section = 'river'
-                branch_map = {'waal': 0, 'haringvliet': 1}
-                branch_idx = branch_map[ch_name]
-            
             sampled_points_m4 = []
             breakdown_points = []
             
+            # Determine which region this channel belongs to
+            if ch_name in ['nieuwe_waterweg', 'hartelkanaal']:
+                eta_m4_array = eta14_o
+                branch_idx = 0 if ch_name == 'nieuwe_waterweg' else 1
+                # Get breakdown components for ocean region
+                try:
+                    if m4_advection is not None:
+                        if isinstance(m4_advection, tuple) and len(m4_advection) > 0:
+                            eta_A_array = m4_advection[0]
+                        else:
+                            eta_A_array = m4_advection
+                    else:
+                        eta_A_array = None
+                    
+                    if m4_no_stress is not None:
+                        if isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 0:
+                            eta_N_array = m4_no_stress[0]
+                        else:
+                            eta_N_array = m4_no_stress
+                    else:
+                        eta_N_array = None
+                    
+                    if m4_stokes is not None:
+                        if isinstance(m4_stokes, tuple) and len(m4_stokes) > 0:
+                            eta_S_array = m4_stokes[0]
+                        else:
+                            eta_S_array = m4_stokes
+                    else:
+                        eta_S_array = None
+                except Exception as e:
+                    print(f"Error extracting ocean M4 components: {e}")
+                    eta_A_array = None
+                    eta_N_array = None
+                    eta_S_array = None
+            elif ch_name in ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas']:
+                eta_m4_array = eta14_m
+                branch_idx = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas'].index(ch_name)
+                try:
+                    if m4_advection is not None and isinstance(m4_advection, tuple) and len(m4_advection) > 1:
+                        eta_A_array = m4_advection[1]
+                    else:
+                        eta_A_array = None
+                    
+                    if m4_no_stress is not None and isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 1:
+                        eta_N_array = m4_no_stress[1]
+                    else:
+                        eta_N_array = None
+                    
+                    if m4_stokes is not None and isinstance(m4_stokes, tuple) and len(m4_stokes) > 1:
+                        eta_S_array = m4_stokes[1]
+                    else:
+                        eta_S_array = None
+                except Exception as e:
+                    print(f"Error extracting middle M4 components: {e}")
+                    eta_A_array = None
+                    eta_N_array = None
+                    eta_S_array = None
+            else:  # river channels
+                eta_m4_array = eta14_r
+                branch_idx = 0 if ch_name == 'waal' else 1
+                try:
+                    if m4_advection is not None and isinstance(m4_advection, tuple) and len(m4_advection) > 2:
+                        eta_A_array = m4_advection[2]
+                    else:
+                        eta_A_array = None
+                    
+                    if m4_no_stress is not None and isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 2:
+                        eta_N_array = m4_no_stress[2]
+                    else:
+                        eta_N_array = None
+                    
+                    if m4_stokes is not None and isinstance(m4_stokes, tuple) and len(m4_stokes) > 2:
+                        eta_S_array = m4_stokes[2]
+                    else:
+                        eta_S_array = None
+                except Exception as e:
+                    print(f"Error extracting river M4 components: {e}")
+                    eta_A_array = None
+                    eta_N_array = None
+                    eta_S_array = None
+            
+            # Sample M4 data points
             for idx, i in enumerate(range(0, len(m2_channel_data), downsample)):
-                if i >= len(eta_m4_full):
-                    break
-                
                 m2_pt = m2_channel_data[i]
                 
-                # Extract M4 value
-                if eta_m4_full.ndim == 1:
-                    eta_val_m4 = eta_m4_full[i]
+                # Extract M4 value at this position
+                if eta_m4_array.ndim == 1:
+                    eta_val_m4 = eta_m4_array[i]
                 else:
-                    eta_val_m4 = eta_m4_full[i, branch_idx]
+                    eta_val_m4 = eta_m4_array[i, branch_idx]
                 
-                # Get M4 component breakdown
+                # Extract breakdown components
                 breakdown_data = {
                     'position': m2_pt['position'],
-                    'position_km': m2_pt['position_km']
+                    'position_km': m2_pt['position_km'],
+                    'index': i
                 }
                 
-                # Try to get breakdown components if available
+                # Add component amplitudes if available
                 try:
-                    if section == 'ocean' and hasattr(model, 'eta_A_o'):
-                        eta_A = model.eta_A_o[i, branch_idx] if model.eta_A_o.ndim > 1 else model.eta_A_o[i]
-                        eta_N = model.eta_N_o[i, branch_idx] if model.eta_N_o.ndim > 1 else model.eta_N_o[i]
-                        eta_S = model.eta_S_o[i, branch_idx] if model.eta_S_o.ndim > 1 else model.eta_S_o[i]
-                        breakdown_data.update({
-                            'advection': float(np.abs(eta_A)),
-                            'no_stress': float(np.abs(eta_N)),
-                            'stokes': float(np.abs(eta_S))
-                        })
-                    elif section == 'middle' and hasattr(model, 'eta_A_m'):
-                        eta_A = model.eta_A_m[i, branch_idx] if model.eta_A_m.ndim > 1 else model.eta_A_m[i]
-                        eta_N = model.eta_N_m[i, branch_idx] if model.eta_N_m.ndim > 1 else model.eta_N_m[i]
-                        eta_S = model.eta_S_m[i, branch_idx] if model.eta_S_m.ndim > 1 else model.eta_S_m[i]
-                        breakdown_data.update({
-                            'advection': float(np.abs(eta_A)),
-                            'no_stress': float(np.abs(eta_N)),
-                            'stokes': float(np.abs(eta_S))
-                        })
-                    elif section == 'river' and hasattr(model, 'eta_A_r'):
-                        eta_A = model.eta_A_r[i, branch_idx] if model.eta_A_r.ndim > 1 else model.eta_A_r[i]
-                        eta_N = model.eta_N_r[i, branch_idx] if model.eta_N_r.ndim > 1 else model.eta_N_r[i]
-                        eta_S = model.eta_S_r[i, branch_idx] if model.eta_S_r.ndim > 1 else model.eta_S_r[i]
+                    if eta_A_array is not None and eta_N_array is not None and eta_S_array is not None:
+                        if eta_A_array.ndim == 1:
+                            eta_A = eta_A_array[i]
+                            eta_N = eta_N_array[i]
+                            eta_S = eta_S_array[i]
+                        else:
+                            eta_A = eta_A_array[i, branch_idx]
+                            eta_N = eta_N_array[i, branch_idx]
+                            eta_S = eta_S_array[i, branch_idx]
+                        
                         breakdown_data.update({
                             'advection': float(np.abs(eta_A)),
                             'no_stress': float(np.abs(eta_N)),
