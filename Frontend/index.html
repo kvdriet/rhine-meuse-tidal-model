@@ -665,63 +665,63 @@
             ];
             
             for (var i = 0; i < channels.length; i++) {
-                var ch = channels[i];
-                var line = L.polyline(ch.coords, {
-                    color: ch.color,
-                    weight: ch.weight,
-                    opacity: 0.8,
-                    smoothFactor: 1
-                }).addTo(map);
-                
-                line.bindPopup('<h4>' + ch.name + '</h4><p>Click to see time series at this channel</p>');
-                
-                // Add click event for time series with closure to capture ch correctly
-                (function(channel) {
+                (function() {
+                    var ch = channels[i];
+                    var line = L.polyline(ch.coords, {
+                        color: ch.color,
+                        weight: ch.weight,
+                        opacity: 0.8,
+                        smoothFactor: 1
+                    }).addTo(map);
+                    
+                    line.bindPopup('<h4>' + ch.name + '</h4><p>Click to see time series at this channel</p>');
+                    
+                    // Add click event for time series
                     line.on('click', function(e) {
                         if (!currentResults) {
                             alert('Please run a simulation first!');
                             return;
                         }
                         
-                        var channelName = channel.name;
+                        var channelName = ch.name;
                         var apiName = channelMapping[channelName];
                         
                         console.log('Clicked channel:', channelName, 'API name:', apiName);
                     
-                    if (!apiName || !currentResults.channels[apiName]) {
-                        alert('Channel data not available');
-                        return;
-                    }
-                    
-                    // Get channel data
-                    var channelData = currentResults.channels[apiName];
-                    
-                    // Find midpoint of channel for time series
-                    var midIndex = Math.floor(channelData.length / 2);
-                    var midPoint = channelData[midIndex];
-                    
-                    // Get M4 data if available
-                    var m4Point = null;
-                    if (currentResults.time_series_m4 && currentResults.time_series_m4.data[apiName]) {
-                        var m4Data = currentResults.time_series_m4.data[apiName].points;
-                        var m4MidIndex = Math.floor(m4Data.length / 2);
-                        m4Point = m4Data[m4MidIndex];
-                    }
-                    
-                    // Prepare data for plotting
-                    var m2Data = {
-                        amplitude: midPoint.eta.amplitude,
-                        phase: midPoint.eta.phase
-                    };
-                    
-                    var m4DataForPlot = null;
-                    if (m4Point) {
-                        m4DataForPlot = {
-                            amplitude: m4Point.amplitude,
-                            phase: m4Point.phase
+                        if (!apiName || !currentResults.channels[apiName]) {
+                            alert('Channel data not available for ' + channelName);
+                            return;
+                        }
+                        
+                        // Get channel data
+                        var channelData = currentResults.channels[apiName];
+                        
+                        // Find midpoint of channel for time series
+                        var midIndex = Math.floor(channelData.length / 2);
+                        var midPoint = channelData[midIndex];
+                        
+                        // Get M4 data if available
+                        var m4Point = null;
+                        if (currentResults.time_series_m4 && currentResults.time_series_m4.data[apiName]) {
+                            var m4Data = currentResults.time_series_m4.data[apiName].points;
+                            var m4MidIndex = Math.floor(m4Data.length / 2);
+                            m4Point = m4Data[m4MidIndex];
+                        }
+                        
+                        // Prepare data for plotting
+                        var m2Data = {
+                            amplitude: midPoint.eta.amplitude,
+                            phase: midPoint.eta.phase
                         };
-                    }
-                    
+                        
+                        var m4DataForPlot = null;
+                        if (m4Point) {
+                            m4DataForPlot = {
+                                amplitude: m4Point.amplitude,
+                                phase: m4Point.phase
+                            };
+                        }
+                        
                         plotTimeSeries(
                             apiName,
                             channelName,
@@ -730,9 +730,9 @@
                             m4DataForPlot
                         );
                     });
-                })(ch);  // Pass ch to IIFE to avoid closure issues
-                
-                channelLayers.push({layer: line, name: ch.name, data: ch});
+                    
+                    channelLayers.push({layer: line, name: ch.name, data: ch});
+                })();
             }
         }
         
