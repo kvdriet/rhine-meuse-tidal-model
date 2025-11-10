@@ -137,12 +137,7 @@ def process_channel_results(eta, u, x, branch_index=0, reverse_x=False, x_offset
 def read_root():
     return {
         "message": "Rhine-Meuse Tidal Model API",
-        "version": "2.0 Enhanced",
-        "new_features": [
-            "M4 component breakdown (advection, no-stress, Stokes)",
-            "Tidal asymmetry analysis",
-            "Interactive hover tooltips support"
-        ],
+        "version": "1.0",
         "network": {
             "topology": {
                 "v1": "Junction: Waal (WL) - Nieuwe Maas (NM) - Nieuwe Merwede (NE)",
@@ -180,287 +175,297 @@ def get_presets():
 def run_tidal_model(params: ModelParameters):
     """
     Run the Rhine-Meuse tidal model with specified parameters
-    Enhanced version with M4 breakdown and tidal asymmetry
+    
+    Network topology:
+    - River: Waal (WL, branch 0 of eta0_r)
+    - River-like (closed): Haringvliet (HV, branch 1 of eta0_r - branches from v2)
+    - Middle: 
+      * Nieuwe Maas (NM, branch 0 of eta0_m) - connects v2-v3 (ocean)
+      * Nieuwe Merwede (NE, branch 1 of eta0_m) - connects v1-v2
+      * Oude Maas (OM, branch 2 of eta0_m) - connects v2-v3 (ocean)
+    - Ocean: 
+      * Nieuwe Waterweg (NW, branch 0 of eta0_o)
+      * Hartelkanaal (HK, branch 1 of eta0_o)
+    
+    Vertices:
+    - v1: Waal (WL) - Nieuwe Merwede (NE) junction
+    - v2: Nieuwe Maas (NM) - Nieuwe Merwede (NE) - Oude Maas (OM) - Haringvliet (HV) junction
+    - v3: Nieuwe Waterweg (NW) - Hartelkanaal (HK) - Nieuwe Maas (NM) - Oude Maas (OM) junction
+    
+    Note: Model x-axis is reversed (ocean at high x, river at low x)
     """
     try:
-        # Apply scenario preset if provided
+        # Apply scenario preset if specified
         if params.scenario and params.scenario in SCENARIO_PRESETS:
             preset = SCENARIO_PRESETS[params.scenario]
             Sf = preset['Sf']
             Av = preset['Av']
             depth_adj = preset['depth_adj']
         else:
-            # Use individual parameter selections
-            Sf = FRICTION_MAPPING.get(params.friction_level, FRICTION_MAPPING['baseline'])
-            Av = VISCOSITY_MAPPING.get(params.viscosity_level, VISCOSITY_MAPPING['baseline'])
+            # Use individual parameters
+            Sf = FRICTION_MAPPING.get(params.friction_level, 0.005)
+            Av = VISCOSITY_MAPPING.get(params.viscosity_level, 0.005)
             depth_adj = params.depth_adjustment
         
-        print(f"Running model with Sf={Sf}, Av={Av}, depth_adj={depth_adj}")
+        print(f"Running model with Av={Av}, Sf={Sf}, depth_adj={depth_adj}")
         
-        # Initialize the model
-        model = Network_model_RM(Sf=Sf, Av=Av)
+        # Initialize model with parameters
+        model = Network_model_RM(Av=Av, Sf=Sf)
         
-        # Apply depth adjustment if non-zero
-        if depth_adj != 0:
-            print(f"Applying depth adjustment of {depth_adj}m to all channels")
-            # Adjust depth parameters
-            model.H_r = model.H_r + depth_adj
-            model.H_o = model.H_o + depth_adj
-            model.H_m = model.H_m + depth_adj
-            
-            # Recalculate z-grids with adjusted depths
-            model.z_r = np.linspace(-model.H_r, 0, model.N)
-            model.z_o = np.linspace(-model.H_o, 0, model.N)
-            model.z_m = np.linspace(-model.H_m, 0, model.N)
-            
-            # Recalculate viscosity with adjusted depths
-            model.Av_r = (Av * model.H_r)
-            model.Av_m = (Av * model.H_m)
-            model.Av_o = (Av * model.H_o)
+        # OPTIMIZATION: Reduce spatial resolution to save memory
+        # This allows more animation frames for smoother propagation visualization
+        model.N = 100  # Reduced from 500 to 100 (5x memory reduction)
         
-        # Run M2 tidal model
-        print("Running M2 calculations...")
+        # Recreate spatial grids with new N
+        model.x = np.linspace(0, model.L, model.N)
+        model.x_r = np.linspace(0, model.L_r, model.N)
+        model.x_m1 = np.linspace(model.L_r[0], model.L_r[0] + model.L_m[:2], model.N)
+        model.x_m2 = np.linspace(model.L_r[0] + model.L_m[1], model.L_r[0] + model.L_m[1] + model.L_m[2], model.N)
+        model.x_m = np.column_stack((model.x_m1, model.x_m2))
+        model.x_o = np.linspace(model.L_r[0] + model.L_m[0], model.L, model.N)
+        model.z_r = np.linspace(-model.H_r, 0, model.N)
+        model.z_o = np.linspace(-model.H_o, 0, model.N)
+        model.z_m = np.linspace(-model.H_m, 0, model.N)
+        model.B_rx = model.B_river * np.exp((model.x_r - model.x_r[0]) / model.Lb_r)
+        model.B_mx = model.B_middle * np.exp((model.x_m - model.x_m[0]) / model.Lb_m)
+        model.B_ox = model.B_ocean * np.exp((model.x_o - model.x_o[0]) / model.Lb_o)
+        
+        # Adjust depths for all channel types
+        model.H_r = model.H_r + depth_adj  # River channels (includes Waal + Haringvliet)
+        model.H_m = model.H_m + depth_adj  # Middle channels (OM, NM, NE)
+        model.H_o = model.H_o + depth_adj  # Ocean channels (NW, HK)
+        
+        # Run M2 tide calculation
         model.M2()
         
-        # Run M4 base calculations (sets up parameters)
-        print("Running M4 base calculations...")
-        model.M4()
+        # Store M2 results
+        eta0_m2_river = model.eta0_r.copy()
+        eta0_m2_ocean = model.eta0_o.copy()
+        eta0_m2_middle = model.eta0_m.copy()
         
-        # Calculate individual M4 components (must be done before M4_total)
-        print("Calculating M4 components...")
-        model.stokes_M4()
-        model.no_stress_M4()
-        model.adv_M4()
+        # Calculate INTERNAL M4 (overtides from non-linear processes)
+        model.M4()  # Initialize M4
+        model.stokes_M4()  # Stokes drift contribution
+        model.no_stress_M4()  # No-stress contribution
+        model.adv_M4()  # Advection contribution
+        model.M4_total()  # Combine all M4 components
+        model.full_tide(first_order="yes")  # Full tide solution
         
-        # Run M4 total calculations (sums all components and sets up eta14)
-        print("Running M4 total calculations...")
-        model.M4_total()
+        # Store internal M4 results (eta14 = M2 + M4)
+        eta14_river = model.eta14_r.copy()
+        eta14_ocean = model.eta14_o.copy()
+        eta14_middle = model.eta14_m.copy()
         
-        # Create tides object for M4 breakdown access
-        # The model should now have all the necessary attributes including eta14_r, eta14_m, eta14_o
-        tides = model
+        # Extract M4 component (eta14 contains M2+M4, so eta_M4 = eta14 - eta_M2 approximately)
+        # But model stores M4 separately, so use those directly
+        eta0_m4_river = model.eta0_r.copy() if hasattr(model, 'eta0_r') else eta14_river - eta0_m2_river
+        eta0_m4_ocean = model.eta0_o.copy() if hasattr(model, 'eta0_o') else eta14_ocean - eta0_m2_ocean
+        eta0_m4_middle = model.eta0_m.copy() if hasattr(model, 'eta0_m') else eta14_middle - eta0_m2_middle
         
-        print("Model run complete, processing results...")
+        # Calculate M4/M2 ratio (shows strength of non-linear effects)
+        eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)
+        eta0_ratio_ocean = np.abs(eta0_m4_ocean) / (np.abs(eta0_m2_ocean) + 1e-10)
+        eta0_ratio_middle = np.abs(eta0_m4_middle) / (np.abs(eta0_m2_middle) + 1e-10)
         
-        # Get M2 tidal component results for each channel
-        # Ocean channels (Nieuwe Waterweg, Hartelkanaal)
-        nw_results = process_channel_results(model.eta0_o, model.u0_o, model.x_o, 
-                                            branch_index=0, reverse_x=True)
-        hk_results = process_channel_results(model.eta0_o, model.u0_o, model.x_o, 
-                                            branch_index=1, reverse_x=True)
+        # Restore M2 results to model for main visualization
+        model.eta0_r = eta0_m2_river
+        model.eta0_o = eta0_m2_ocean
+        model.eta0_m = eta0_m2_middle
+
+        # Calculate INTERNAL M4 (generated by non-linear interactions)
+        print("Calculating internal M4 components...")
+        model.M4()              # Basic M4 setup
+        model.stokes_M4()       # Stokes contribution
+        model.no_stress_M4()    # No-stress boundary contribution
+        model.adv_M4()          # Advective contribution
+        model.M4_total()        # Total internal M4
         
-        # Middle channels (Nieuwe Maas, Nieuwe Merwede, Oude Maas)
-        nm_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
-                                            branch_index=0, reverse_x=True)
-        ne_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
-                                            branch_index=1, reverse_x=True)
-        om_results = process_channel_results(model.eta0_m, model.u0_m, model.x_m, 
-                                            branch_index=2, reverse_x=True)
+        # Store INTERNAL M4 results (eta14 is the internal M4)
+        eta0_m4_river = model.eta14_r.copy()
+        eta0_m4_ocean = model.eta14_o.copy()
+        eta0_m4_middle = model.eta14_m.copy()
         
-        # River channels (Waal, Haringvliet)
-        wl_results = process_channel_results(model.eta0_r, model.u0_r, model.x_r, 
-                                            branch_index=0, reverse_x=True)
-        hv_results = process_channel_results(model.eta0_r, model.u0_r, model.x_r, 
-                                            branch_index=1, reverse_x=True)
+        print(f"Internal M4 calculated - River: {eta0_m4_river.shape}, Ocean: {eta0_m4_ocean.shape}, Middle: {eta0_m4_middle.shape}")
         
-        # Channel names for consistent ordering
-        channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 
-                        'nieuwe_merwede', 'oude_maas', 'waal', 'haringvliet']
+        # Restore M2 for main results (backwards compatibility)
+        model.eta0_r = eta0_m2_river
+        model.eta0_o = eta0_m2_ocean
+        model.eta0_m = eta0_m2_middle
+        
+        print("Model run complete (M2 and internal M4), processing results...")
+        
+        # Using the working Python plotting logic (ocean right, river left), then flipping
+        # This matches your original matplotlib code that works correctly
+        
+        C = float(np.max(model.L_r)) / 1000  # km, reference point (95 km)
+        
+        # Calculate river x positions
+        x_river_begin = (np.max(model.L_r) - model.L_r) / 1000  # km
+        test = np.array([0, (model.L_m[1] + model.L_r[1]) / 1000])  # km
+        
+        # OCEAN CHANNELS - process with offset -C (will be on right before flip)
+        nieuwe_waterweg_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
+                                                          branch_index=0, reverse_x=False,
+                                                          x_offset=-C * 1000)
+        hartelkanaal_results = process_channel_results(model.eta0_o, model.u0_mean_o, model.x_o, 
+                                                       branch_index=1, reverse_x=False,
+                                                       x_offset=-C * 1000)
+        
+        # MIDDLE CHANNELS - NM and NE standard, OM needs special x_middle3 treatment
+        nieuwe_maas_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                      branch_index=0, reverse_x=False,
+                                                      x_offset=-C * 1000)
+        nieuwe_merwede_results = process_channel_results(model.eta0_m, model.u0_mean_m, model.x_m, 
+                                                         branch_index=1, reverse_x=False,
+                                                         x_offset=-C * 1000)
+        
+        # Oude Maas (OM) - create x_middle3 positions (from x_middle[-1,1] to x_ocean[0,0])
+        # This connects OM properly between middle and ocean
+        oude_maas_results = []
+        N = len(model.eta0_m)
+        x_middle3_start = model.x_m[-1, 1]  # End of middle branch 1 (NE)
+        x_middle3_end = model.x_o[0, 0]  # Start of ocean branch 0
+        x_middle3 = np.linspace(x_middle3_start, x_middle3_end, N)
+        
+        for i in range(N):
+            oude_maas_results.append({
+                'position': float(x_middle3[i] - C * 1000),
+                'position_km': float(x_middle3[i] / 1000 - C),
+                'eta': complex_to_dict(model.eta0_m[i, 2]),
+                'velocity': complex_to_dict(model.u0_mean_m[i, 2] if model.u0_mean_m.ndim > 1 else model.u0_mean_m[i])
+            })
+        
+        # RIVER CHANNELS
+        # Waal
+        waal_results = []
+        for i in range(len(model.x_r)):
+            x_val = (x_river_begin[0] + test[0]) + model.x_r[i, 0] / 1000
+            waal_results.append({
+                'position': float((x_val - C) * 1000),
+                'position_km': float(x_val - C),
+                'eta': complex_to_dict(model.eta0_r[i, 0]),
+                'velocity': complex_to_dict(model.u0_mean_r[i, 0])
+            })
+        
+        # Haringvliet - with reversed amplitudes ([::-1])
+        haringvliet_results = []
+        for i in range(len(model.x_r)):
+            x_val = (x_river_begin[1] + test[1]) + model.x_r[i, 1] / 1000
+            # Reverse the amplitude index
+            rev_idx = len(model.x_r) - 1 - i
+            haringvliet_results.append({
+                'position': float((x_val - C) * 1000),
+                'position_km': float(x_val - C),
+                'eta': complex_to_dict(model.eta0_r[rev_idx, 1]),  # Reversed!
+                'velocity': complex_to_dict(model.u0_mean_r[rev_idx, 1])  # Reversed!
+            })
+        
+        # NOW FLIP EVERYTHING: Negate all x-coordinates to put ocean on LEFT, river on RIGHT
+        all_results = [
+            nieuwe_waterweg_results, hartelkanaal_results,
+            nieuwe_maas_results, nieuwe_merwede_results, oude_maas_results,
+            waal_results, haringvliet_results
+        ]
+        
+        for results_list in all_results:
+            for result in results_list:
+                result['position'] = -result['position']
+                result['position_km'] = -result['position_km']
+        
+        # SPATIAL ANIMATION: Send points along each channel with coordinates
+        # This matches your Python scatter plot approach
+        time_series = {}
+        channel_names = ['nieuwe_waterweg', 'hartelkanaal', 'haringvliet', 
+                        'nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal']
+        
+        # Map channels to their result arrays (which contain coordinates)
         channel_results_map = {
-            'nieuwe_waterweg': nw_results,
-            'hartelkanaal': hk_results,
-            'nieuwe_maas': nm_results,
-            'nieuwe_merwede': ne_results,
-            'oude_maas': om_results,
-            'waal': wl_results,
-            'haringvliet': hv_results
+            'nieuwe_waterweg': nieuwe_waterweg_results,
+            'hartelkanaal': hartelkanaal_results,
+            'nieuwe_maas': nieuwe_maas_results,
+            'nieuwe_merwede': nieuwe_merwede_results,
+            'oude_maas': oude_maas_results,
+            'haringvliet': haringvliet_results,
+            'waal': waal_results
         }
         
-        # Generate time series data for M2 animation
-        print("Generating M2 time series...")
-        num_frames = 60
-        time_steps = np.linspace(0, 2 * np.pi, num_frames)
+        # For each channel, extract spatial points (sample every 2nd point for smooth line effect)
+        downsample = 2  # Was 5, now 2 for smoother gradient line
+        for ch_name in channel_names:
+            results = channel_results_map[ch_name]
+            
+            # Get coordinates from KML data (we need to match result indices to coordinates)
+            # Sample points for animation
+            sampled_points = []
+            for i in range(0, len(results), downsample):
+                eta_complex = results[i]['eta']
+                eta_val = complex(eta_complex['real'], eta_complex['imag'])
+                
+                sampled_points.append({
+                    'amplitude': float(np.abs(eta_val)),
+                    'phase': float(np.angle(eta_val)),
+                    'index': i  # Index to match with coordinates in frontend
+                })
+            
+            time_series[ch_name] = {
+                'points': sampled_points,
+                'total_points': len(results)
+            }
         
-        time_series = {}
-        for ch_name, ch_data in channel_results_map.items():
-            frame_data = []
-            for t in time_steps:
-                points = []
-                for pt in ch_data:
-                    eta_complex = pt['eta']['real'] + 1j * pt['eta']['imag']
-                    eta_real = np.real(eta_complex * np.exp(1j * t))
-                    points.append({
-                        'position': pt['position'],
-                        'position_km': pt['position_km'],
-                        'eta': float(eta_real)
-                    })
-                frame_data.append(points)
-            time_series[ch_name] = frame_data
+        # Calculate global min/max for consistent color scaling (like your vmin/vmax)
+        all_amplitudes = []
+        for ch_name in channel_names:
+            for point in time_series[ch_name]['points']:
+                all_amplitudes.append(point['amplitude'])
         
-        # Calculate global min/max for M2
-        all_values = [pt['eta'] for ch in time_series.values() 
-                     for frame in ch for pt in frame]
-        global_min = min(all_values)
-        global_max = max(all_values)
+        global_min = -max(all_amplitudes)  # For vmin (negative of max amplitude)
+        global_max = max(all_amplitudes)   # For vmax
         
-        # M4 tidal component processing with breakdown
-        print("Processing M4 component with breakdown...")
-        
-        # M4_total() already calculated all components, they should be available as attributes
-        # Get the individual components
-        try:
-            # These were calculated by M4_total via M4_ext which calls the individual methods
-            m4_advection = (model.eta14_adv_o, model.eta14_adv_m, model.eta14_adv_r)
-            m4_no_stress = (model.eta14_no_stress_o, model.eta14_no_stress_m, model.eta14_no_stress_r)
-            m4_stokes = (model.eta14_stokes_o, model.eta14_stokes_m, model.eta14_stokes_r)
-            m4_total = (eta14_o, eta14_m, eta14_r)
-            print("Successfully extracted M4 components")
-        except Exception as e:
-            print(f"Warning: Could not extract all M4 components: {e}")
-            print("M4 breakdown may not be available")
-            m4_advection = None
-            m4_no_stress = None
-            m4_stokes = None
-            m4_total = (eta14_o, eta14_m, eta14_r)
-        
-        # Extract M4 for each region - M4_total() already set these as attributes
-        eta14_o = model.eta14_o
-        eta14_m = model.eta14_m
-        eta14_r = model.eta14_r
-        
-        # Process M4 for time series (downsampled for efficiency)
-        downsample = 5
+        # Create M4 data (using stored M4 results)
+        # We need to use the same position data as M2 (from channel_results_map)
         time_series_m4 = {}
-        m4_breakdown = {}
+        
+        # Map M4 eta arrays to channel names
+        m4_eta_map = {
+            'nieuwe_waterweg': (eta0_m4_ocean, 0),
+            'hartelkanaal': (eta0_m4_ocean, 1),
+            'nieuwe_maas': (eta0_m4_middle, 0),
+            'nieuwe_merwede': (eta0_m4_middle, 1),
+            'oude_maas': (eta0_m4_middle, 2),
+            'haringvliet': (eta0_m4_river, 1),
+            'waal': (eta0_m4_river, 0)
+        }
         
         for ch_name in channel_names:
+            eta_array_m4, branch_idx = m4_eta_map[ch_name]
+            
+            # Extract eta data for this channel
+            if eta_array_m4.ndim > 1:
+                eta_channel_m4 = eta_array_m4[:, branch_idx]
+            else:
+                eta_channel_m4 = eta_array_m4
+            
+            # IMPORTANT: Haringvliet needs to be reversed (like M2)
+            if ch_name == 'haringvliet':
+                eta_channel_m4 = eta_channel_m4[::-1]  # Reverse the array
+            
+            # Use M2 channel data for positions (ensures consistency)
             m2_channel_data = channel_results_map[ch_name]
+            
+            # Sample every downsample points (matching M2)
             sampled_points_m4 = []
-            breakdown_points = []
-            
-            # Determine which region this channel belongs to
-            if ch_name in ['nieuwe_waterweg', 'hartelkanaal']:
-                eta_m4_array = eta14_o
-                branch_idx = 0 if ch_name == 'nieuwe_waterweg' else 1
-                # Get breakdown components for ocean region
-                try:
-                    if m4_advection is not None:
-                        if isinstance(m4_advection, tuple) and len(m4_advection) > 0:
-                            eta_A_array = m4_advection[0]
-                        else:
-                            eta_A_array = m4_advection
-                    else:
-                        eta_A_array = None
-                    
-                    if m4_no_stress is not None:
-                        if isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 0:
-                            eta_N_array = m4_no_stress[0]
-                        else:
-                            eta_N_array = m4_no_stress
-                    else:
-                        eta_N_array = None
-                    
-                    if m4_stokes is not None:
-                        if isinstance(m4_stokes, tuple) and len(m4_stokes) > 0:
-                            eta_S_array = m4_stokes[0]
-                        else:
-                            eta_S_array = m4_stokes
-                    else:
-                        eta_S_array = None
-                except Exception as e:
-                    print(f"Error extracting ocean M4 components: {e}")
-                    eta_A_array = None
-                    eta_N_array = None
-                    eta_S_array = None
-            elif ch_name in ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas']:
-                eta_m4_array = eta14_m
-                branch_idx = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas'].index(ch_name)
-                try:
-                    if m4_advection is not None and isinstance(m4_advection, tuple) and len(m4_advection) > 1:
-                        eta_A_array = m4_advection[1]
-                    else:
-                        eta_A_array = None
-                    
-                    if m4_no_stress is not None and isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 1:
-                        eta_N_array = m4_no_stress[1]
-                    else:
-                        eta_N_array = None
-                    
-                    if m4_stokes is not None and isinstance(m4_stokes, tuple) and len(m4_stokes) > 1:
-                        eta_S_array = m4_stokes[1]
-                    else:
-                        eta_S_array = None
-                except Exception as e:
-                    print(f"Error extracting middle M4 components: {e}")
-                    eta_A_array = None
-                    eta_N_array = None
-                    eta_S_array = None
-            else:  # river channels
-                eta_m4_array = eta14_r
-                branch_idx = 0 if ch_name == 'waal' else 1
-                try:
-                    if m4_advection is not None and isinstance(m4_advection, tuple) and len(m4_advection) > 2:
-                        eta_A_array = m4_advection[2]
-                    else:
-                        eta_A_array = None
-                    
-                    if m4_no_stress is not None and isinstance(m4_no_stress, tuple) and len(m4_no_stress) > 2:
-                        eta_N_array = m4_no_stress[2]
-                    else:
-                        eta_N_array = None
-                    
-                    if m4_stokes is not None and isinstance(m4_stokes, tuple) and len(m4_stokes) > 2:
-                        eta_S_array = m4_stokes[2]
-                    else:
-                        eta_S_array = None
-                except Exception as e:
-                    print(f"Error extracting river M4 components: {e}")
-                    eta_A_array = None
-                    eta_N_array = None
-                    eta_S_array = None
-            
-            # Sample M4 data points
             for idx, i in enumerate(range(0, len(m2_channel_data), downsample)):
+                if i >= len(eta_channel_m4):
+                    # If M4 array is shorter, use last value
+                    eta_val_m4 = eta_channel_m4[-1]
+                else:
+                    eta_val_m4 = eta_channel_m4[i]
+                
                 m2_pt = m2_channel_data[i]
                 
-                # Extract M4 value at this position
-                if eta_m4_array.ndim == 1:
-                    eta_val_m4 = eta_m4_array[i]
-                else:
-                    eta_val_m4 = eta_m4_array[i, branch_idx]
-                
-                # Extract breakdown components
-                breakdown_data = {
-                    'position': m2_pt['position'],
-                    'position_km': m2_pt['position_km'],
-                    'index': i
-                }
-                
-                # Add component amplitudes if available
-                try:
-                    if eta_A_array is not None and eta_N_array is not None and eta_S_array is not None:
-                        if eta_A_array.ndim == 1:
-                            eta_A = eta_A_array[i]
-                            eta_N = eta_N_array[i]
-                            eta_S = eta_S_array[i]
-                        else:
-                            eta_A = eta_A_array[i, branch_idx]
-                            eta_N = eta_N_array[i, branch_idx]
-                            eta_S = eta_S_array[i, branch_idx]
-                        
-                        breakdown_data.update({
-                            'advection': float(np.abs(eta_A)),
-                            'no_stress': float(np.abs(eta_N)),
-                            'stokes': float(np.abs(eta_S))
-                        })
-                except Exception as e:
-                    print(f"Warning: Could not extract M4 breakdown for {ch_name}: {e}")
-                
-                breakdown_points.append(breakdown_data)
-                
                 sampled_points_m4.append({
-                    'position': m2_pt['position'],
-                    'position_km': m2_pt['position_km'],
+                    'position': m2_pt['position'],  # Use M2 position directly
+                    'position_km': m2_pt['position_km'],  # Use M2 position_km directly
                     'amplitude': float(np.abs(eta_val_m4)),
                     'phase': float(np.angle(eta_val_m4)),
                     'index': i
@@ -470,24 +475,17 @@ def run_tidal_model(params: ModelParameters):
                 'points': sampled_points_m4,
                 'total_points': len(m2_channel_data)
             }
-            
-            m4_breakdown[ch_name] = {
-                'points': breakdown_points,
-                'has_data': len(breakdown_points) > 0 and 'advection' in breakdown_points[0]
-            }
         
-        # Calculate M4/M2 ratio and tidal asymmetry
-        print("Calculating tidal asymmetry...")
+        # Calculate M4/M2 ratio for each channel
         m4_m2_ratio = {}
-        tidal_asymmetry = {}
-        
         for ch_name in channel_names:
+            # Get M2 full channel data (has position) and M4 data
             m2_full_data = channel_results_map[ch_name]
             m4_points = time_series_m4[ch_name]['points']
             
+            # We need to match M4 points with M2 data using downsampling
+            # M4 was sampled every 'downsample' points, so we do the same for M2
             ratio_points = []
-            asymmetry_points = []
-            
             for idx, i in enumerate(range(0, len(m2_full_data), downsample)):
                 if idx >= len(m4_points):
                     break
@@ -497,38 +495,16 @@ def run_tidal_model(params: ModelParameters):
                 
                 m2_amp = m2_pt['eta']['amplitude']
                 m4_amp = m4_pt['amplitude']
-                m2_phase = m2_pt['eta']['phase']
-                m4_phase = m4_pt['phase']
                 
-                if m2_amp > 0.001:
+                if m2_amp > 0.001:  # Avoid division by zero
                     ratio = m4_amp / m2_amp
                 else:
                     ratio = 0.0
-                
-                # Tidal asymmetry metrics
-                phase_diff = m4_phase - 2 * m2_phase
-                while phase_diff > np.pi:
-                    phase_diff -= 2 * np.pi
-                while phase_diff < -np.pi:
-                    phase_diff += 2 * np.pi
-                
-                skewness = ratio * np.cos(phase_diff)
-                asymmetry_strength = 2 * ratio / (1 + ratio**2) if ratio > 0 else 0
-                
+                    
                 ratio_points.append({
                     'position': m2_pt['position'],
                     'position_km': m2_pt['position_km'],
                     'ratio': float(ratio),
-                    'index': i
-                })
-                
-                asymmetry_points.append({
-                    'position': m2_pt['position'],
-                    'position_km': m2_pt['position_km'],
-                    'skewness': float(skewness),
-                    'phase_difference': float(phase_diff * 180 / np.pi),
-                    'asymmetry_strength': float(asymmetry_strength),
-                    'flood_dominant': bool(skewness > 0),
                     'index': i
                 })
             
@@ -536,27 +512,41 @@ def run_tidal_model(params: ModelParameters):
                 'points': ratio_points,
                 'total_points': len(m2_full_data)
             }
-            
-            tidal_asymmetry[ch_name] = {
-                'points': asymmetry_points,
-                'total_points': len(m2_full_data)
-            }
         
-        # Calculate global min/max
-        all_amplitudes_m4 = [pt['amplitude'] for ch in channel_names for pt in time_series_m4[ch]['points']]
-        all_ratios = [pt['ratio'] for ch in channel_names for pt in m4_m2_ratio[ch]['points']]
-        all_skewness = [pt['skewness'] for ch in channel_names for pt in tidal_asymmetry[ch]['points']]
+        # Calculate global min/max for M4
+        all_amplitudes_m4 = []
+        for ch_name in channel_names:
+            for point in time_series_m4[ch_name]['points']:
+                all_amplitudes_m4.append(point['amplitude'])
         
         global_min_m4 = -max(all_amplitudes_m4)
         global_max_m4 = max(all_amplitudes_m4)
+        
+        # Calculate global min/max for M4/M2 ratio
+        all_ratios = []
+        for ch_name in channel_names:
+            for point in m4_m2_ratio[ch_name]['points']:
+                all_ratios.append(point['ratio'])
+        
         global_min_ratio = min(all_ratios) if all_ratios else 0
         global_max_ratio = max(all_ratios) if all_ratios else 1
-        global_min_skewness = min(all_skewness) if all_skewness else -1
-        global_max_skewness = max(all_skewness) if all_skewness else 1
         
-        # Compile results
+        # Process results
         results = {
-            "channels": channel_results_map,
+            "channels": {
+                # River channels
+                "waal": waal_results,
+                "haringvliet": haringvliet_results,
+                
+                # Middle channels (correct order: NM, NE, OM)
+                "nieuwe_maas": nieuwe_maas_results,
+                "nieuwe_merwede": nieuwe_merwede_results,
+                "oude_maas": oude_maas_results,
+                
+                # Ocean channels
+                "nieuwe_waterweg": nieuwe_waterweg_results,
+                "hartelkanaal": hartelkanaal_results
+            },
             "vertices": {
                 "v1": complex_to_dict(model.eta_vertex_1),
                 "v2": complex_to_dict(model.eta_vertex_2),
@@ -571,37 +561,27 @@ def run_tidal_model(params: ModelParameters):
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
             "time_series": {
                 "data": time_series,
-                "num_frames": 60,
-                "period_hours": 12.42,
-                "format": "spatial_points",
-                "global_min": float(global_min),
-                "global_max": float(global_max),
-                "description": "M2 tidal component"
+                "num_frames": 60,  # Increased from 24 to 60 for smoother propagation
+                "period_hours": 12.42,  # M2 tide period
+                "format": "spatial_points",  # Spatial points with amplitude & phase
+                "global_min": float(global_min),  # For color scale (vmin)
+                "global_max": float(global_max),  # For color scale (vmax)
+                "description": "Spatial points along each channel with amplitude/phase (like Python scatter plot)"
             },
             "time_series_m4": {
                 "data": time_series_m4,
                 "num_frames": 60,
-                "period_hours": 6.21,
+                "period_hours": 6.21,  # M4 tide period (half of M2)
                 "format": "spatial_points",
                 "global_min": float(global_min_m4),
                 "global_max": float(global_max_m4),
                 "description": "M4 tidal component"
             },
-            "m4_breakdown": {
-                "data": m4_breakdown,
-                "description": "M4 component breakdown: advection, no-stress, and Stokes"
-            },
             "m4_m2_ratio": {
                 "data": m4_m2_ratio,
                 "global_min": float(global_min_ratio),
                 "global_max": float(global_max_ratio),
-                "description": "M4/M2 amplitude ratio"
-            },
-            "tidal_asymmetry": {
-                "data": tidal_asymmetry,
-                "global_min_skewness": float(global_min_skewness),
-                "global_max_skewness": float(global_max_skewness),
-                "description": "Tidal asymmetry metrics (skewness, phase difference, flood/ebb dominance)"
+                "description": "M4/M2 amplitude ratio showing non-linear effects"
             },
             "velocity_structure": {
                 "ocean": {
@@ -622,11 +602,14 @@ def run_tidal_model(params: ModelParameters):
                     "z": (model.z_r[::2, 0].tolist() if model.z_r.ndim > 1 else model.z_r[::2].tolist()) if hasattr(model, 'z_r') else None,
                     "channels": ["waal", "haringvliet"]
                 },
-                "description": "3D velocity amplitude for M2 tide"
+                "description": "3D velocity amplitude (50×50 downsampled) in m/s for M2 tide"
             }
         }
         
-        print("Results processed successfully with M4 breakdown and tidal asymmetry")
+        print("Results processed successfully for all 7 channels with time series and velocity structure")
+        print(f"Velocity structure sizes: ocean={len(results['velocity_structure']['ocean']['u0']) if results['velocity_structure']['ocean']['u0'] else 0}, " +
+              f"middle={len(results['velocity_structure']['middle']['u0']) if results['velocity_structure']['middle']['u0'] else 0}, " +
+              f"river={len(results['velocity_structure']['river']['u0']) if results['velocity_structure']['river']['u0'] else 0}")
         return results
         
     except Exception as e:
@@ -634,6 +617,35 @@ def run_tidal_model(params: ModelParameters):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Model execution failed: {str(e)}")
+
+@app.post("/run_model_quick")
+def run_model_quick(params: ModelParameters):
+    """
+    Lightweight endpoint returning only key metrics for fast updates
+    """
+    try:
+        Sf = FRICTION_MAPPING.get(params.friction_level, 0.005)
+        Av = VISCOSITY_MAPPING.get(params.viscosity_level, 0.005)
+        depth_adj = params.depth_adjustment
+        
+        # Run quick model
+        model = Network_model_RM(Av=Av, Sf=Sf)
+        model.H_r = model.H_r + depth_adj
+        model.H_m = model.H_m + depth_adj
+        model.H_o = model.H_o + depth_adj
+        model.M2()
+        
+        # Return simplified results for real-time slider updates
+        return {
+            "max_amplitude": float(np.max(np.abs(model.eta0_r))),
+            "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
+            "friction": float(Sf),
+            "viscosity": float(Av),
+            "success": True
+        }
+    except Exception as e:
+        print(f"Error in quick model: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
