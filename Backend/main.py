@@ -29,6 +29,7 @@ class ModelParameters(BaseModel):
     depth_adjustment: float  # -2.0 to +2.0 meters
     viscosity_level: str  # 'very_low', 'low', 'baseline', 'high', 'very_high'
     scenario: Optional[str] = None  # 'drought', 'baseline', 'high_flow', 'dredged'
+    m4_type: Optional[str] = 'internal'  # 'internal' (non-linear) or 'external' (North Sea boundary)
 
 class TidalResults(BaseModel):
     """Output results from the model"""
@@ -243,24 +244,41 @@ def run_tidal_model(params: ModelParameters):
         eta0_m2_ocean = model.eta0_o.copy()
         eta0_m2_middle = model.eta0_m.copy()
         
-        # Calculate INTERNAL M4 (overtides from non-linear processes)
-        model.M4()  # Initialize M4
-        model.stokes_M4()  # Stokes drift contribution
-        model.no_stress_M4()  # No-stress contribution
-        model.adv_M4()  # Advection contribution
-        model.M4_total()  # Combine all M4 components
-        model.full_tide(first_order="yes")  # Full tide solution
+        # Calculate M4 based on user selection
+        m4_type = params.m4_type if params.m4_type else 'internal'
         
-        # Store internal M4 results (eta14 = M2 + M4)
-        eta14_river = model.eta14_r.copy()
-        eta14_ocean = model.eta14_o.copy()
-        eta14_middle = model.eta14_m.copy()
-        
-        # Extract M4 component (eta14 contains M2+M4, so eta_M4 = eta14 - eta_M2 approximately)
-        # But model stores M4 separately, so use those directly
-        eta0_m4_river = model.eta0_r.copy() if hasattr(model, 'eta0_r') else eta14_river - eta0_m2_river
-        eta0_m4_ocean = model.eta0_o.copy() if hasattr(model, 'eta0_o') else eta14_ocean - eta0_m2_ocean
-        eta0_m4_middle = model.eta0_m.copy() if hasattr(model, 'eta0_m') else eta14_middle - eta0_m2_middle
+        if m4_type == 'external':
+            # EXTERNAL M4 from North Sea boundary
+            print("Calculating external M4 (North Sea boundary)...")
+            model.M2(M4="yes")  # Run with external M4
+            eta14_river = model.eta0_r.copy()
+            eta14_ocean = model.eta0_o.copy()
+            eta14_middle = model.eta0_m.copy()
+            
+            # M4 component is the difference
+            eta0_m4_river = eta14_river - eta0_m2_river
+            eta0_m4_ocean = eta14_ocean - eta0_m2_ocean
+            eta0_m4_middle = eta14_middle - eta0_m2_middle
+            
+        else:  # internal
+            # INTERNAL M4 (overtides from non-linear processes)
+            print("Calculating internal M4 (non-linear generation)...")
+            model.M4()  # Initialize M4
+            model.stokes_M4()  # Stokes drift contribution
+            model.no_stress_M4()  # No-stress contribution
+            model.adv_M4()  # Advection contribution
+            model.M4_total()  # Combine all M4 components
+            model.full_tide(first_order="yes")  # Full tide solution
+            
+            # Store internal M4 results (eta14 = M2 + M4)
+            eta14_river = model.eta14_r.copy()
+            eta14_ocean = model.eta14_o.copy()
+            eta14_middle = model.eta14_m.copy()
+            
+            # Extract M4 component
+            eta0_m4_river = model.eta0_r.copy() if hasattr(model, 'eta0_r') else eta14_river - eta0_m2_river
+            eta0_m4_ocean = model.eta0_o.copy() if hasattr(model, 'eta0_o') else eta14_ocean - eta0_m2_ocean
+            eta0_m4_middle = model.eta0_m.copy() if hasattr(model, 'eta0_m') else eta14_middle - eta0_m2_middle
         
         # Calculate M4/M2 ratio (shows strength of non-linear effects)
         eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)
@@ -555,7 +573,8 @@ def run_tidal_model(params: ModelParameters):
             "parameters_used": {
                 "Sf": float(Sf),
                 "Av": float(Av),
-                "depth_adjustment": float(depth_adj)
+                "depth_adjustment": float(depth_adj),
+                "m4_type": m4_type
             },
             "max_amplitude": float(np.max(np.abs(model.eta0_r))),
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
