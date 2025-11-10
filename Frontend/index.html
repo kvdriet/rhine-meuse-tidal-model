@@ -612,6 +612,9 @@
         </div>
     </div>
     
+    <!-- Tooltip overlay -->
+    <div id="graphTooltip" style="position: absolute; background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.5); pointer-events: none; display: none; z-index: 10000; font-size: 13px; line-height: 1.6; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);"></div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // API Configuration
@@ -1258,6 +1261,95 @@
                 ctx.fillStyle = '#cbd5e1';
                 ctx.fillText(ch.name, legendX + 35, y + 4);
             });
+            
+            // Setup tooltip event listeners after plotting
+            setupGraphTooltip(channelsToPlot, getAmplitudeData, scaleX, scaleY, padding, minPos, maxPos, maxAmp);
+        }
+        
+        function setupGraphTooltip(channelsToPlot, getAmplitudeData, scaleX, scaleY, padding, minPos, maxPos, maxAmp) {
+            var canvas = document.getElementById('amplitudeCanvas');
+            var tooltip = document.getElementById('graphTooltip');
+            
+            // Store current data for lookups
+            var channelDataCache = {};
+            channelsToPlot.forEach(function(ch) {
+                channelDataCache[ch.key] = getAmplitudeData(ch.key);
+            });
+            
+            canvas.onmousemove = function(e) {
+                var rect = canvas.getBoundingClientRect();
+                var mouseX = e.clientX - rect.left;
+                var mouseY = e.clientY - rect.top;
+                
+                // Check if mouse is within plot area
+                if (mouseX < padding.left || mouseX > canvas.width - padding.right ||
+                    mouseY < padding.top || mouseY > canvas.height - padding.bottom) {
+                    tooltip.style.display = 'none';
+                    return;
+                }
+                
+                // Find closest point
+                var closestPoint = null;
+                var closestDist = Infinity;
+                var closestChannel = null;
+                
+                channelsToPlot.forEach(function(ch) {
+                    var data = channelDataCache[ch.key];
+                    if (data) {
+                        data.forEach(function(pt) {
+                            var x = scaleX(pt.position_km || pt.position / 1000);
+                            var y = scaleY(pt.eta.amplitude);
+                            var dist = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+                            
+                            if (dist < closestDist && dist < 20) {  // 20px threshold
+                                closestDist = dist;
+                                closestPoint = pt;
+                                closestChannel = ch;
+                            }
+                        });
+                    }
+                });
+                
+                if (closestPoint && closestChannel) {
+                    // Build tooltip content
+                    var channelNames = {
+                        'nieuwe_waterweg': 'Nieuwe Waterweg',
+                        'hartelkanaal': 'Hartelkanaal',
+                        'nieuwe_maas': 'Nieuwe Maas',
+                        'nieuwe_merwede': 'Nieuwe Merwede',
+                        'oude_maas': 'Oude Maas',
+                        'waal': 'Waal',
+                        'haringvliet': 'Haringvliet'
+                    };
+                    
+                    var html = '<div style="font-weight: bold; color: ' + closestChannel.color + ';">' + 
+                               channelNames[closestChannel.key] + '</div>';
+                    html += '<div>Position: ' + (closestPoint.position_km || closestPoint.position / 1000).toFixed(2) + ' km</div>';
+                    html += '<div>Amplitude: ' + closestPoint.eta.amplitude.toFixed(4) + ' m</div>';
+                    
+                    // Add phase if available (M2 data)
+                    if (closestPoint.eta.phase !== undefined && currentGraphComponent === 'm2') {
+                        html += '<div>Phase: ' + closestPoint.eta.phase.toFixed(3) + ' rad</div>';
+                    }
+                    
+                    // Add ratio info if applicable
+                    if (currentGraphComponent === 'ratio') {
+                        html += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(56, 189, 248, 0.3);">';
+                        html += 'Ratio = M₄/M₂: ' + (closestPoint.eta.amplitude * 100).toFixed(2) + '%</div>';
+                    }
+                    
+                    tooltip.innerHTML = html;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    tooltip.style.top = (e.clientY + 15) + 'px';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            };
+            
+            canvas.onmouseleave = function() {
+                tooltip.style.display = 'none';
+            };
         }
         
         function visualizeOnMap(results) {
