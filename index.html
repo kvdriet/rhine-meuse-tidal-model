@@ -675,15 +675,18 @@
                 
                 line.bindPopup('<h4>' + ch.name + '</h4><p>Click to see time series at this channel</p>');
                 
-                // Add click event for time series
-                line.on('click', function(e) {
-                    if (!currentResults) {
-                        alert('Please run a simulation first!');
-                        return;
-                    }
-                    
-                    var channelName = ch.name;
-                    var apiName = channelMapping[channelName];
+                // Add click event for time series with closure to capture ch correctly
+                (function(channel) {
+                    line.on('click', function(e) {
+                        if (!currentResults) {
+                            alert('Please run a simulation first!');
+                            return;
+                        }
+                        
+                        var channelName = channel.name;
+                        var apiName = channelMapping[channelName];
+                        
+                        console.log('Clicked channel:', channelName, 'API name:', apiName);
                     
                     if (!apiName || !currentResults.channels[apiName]) {
                         alert('Channel data not available');
@@ -719,14 +722,15 @@
                         };
                     }
                     
-                    plotTimeSeries(
-                        apiName,
-                        channelName,
-                        midPoint.position_km || midPoint.position / 1000,
-                        m2Data,
-                        m4DataForPlot
-                    );
-                });
+                        plotTimeSeries(
+                            apiName,
+                            channelName,
+                            midPoint.position_km || midPoint.position / 1000,
+                            m2Data,
+                            m4DataForPlot
+                        );
+                    });
+                })(ch);  // Pass ch to IIFE to avoid closure issues
                 
                 channelLayers.push({layer: line, name: ch.name, data: ch});
             }
