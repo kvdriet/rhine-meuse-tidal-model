@@ -547,6 +547,10 @@
             <span class="result-label">Viscosity:</span>
             <span class="result-value" id="viscosityVal">-</span>
         </div>
+        <div class="result-item">
+            <span class="result-label">M₄ Type:</span>
+            <span class="result-value" id="m4TypeVal">-</span>
+        </div>
         <button class="view-graph-btn" onclick="showAmplitudeGraph()">📈 View Amplitude Graph</button>
         <button class="view-graph-btn" onclick="showVelocityStructure()" style="margin-top: 10px;">🌀 View Velocity Structure</button>
     </div>
@@ -839,11 +843,19 @@
             document.getElementById('phaseLag').textContent = (results.phase_lag * 180 / Math.PI).toFixed(1) + '°';
             document.getElementById('frictionVal').textContent = results.parameters_used.Sf.toFixed(4);
             
+            // Display M4 type
+            var m4Type = results.parameters_used.m4_type || 'internal';
+            var m4TypeLabel = m4Type === 'external' ? 'External (North Sea)' : 'Internal (Non-linear)';
+            document.getElementById('m4TypeVal').textContent = m4TypeLabel;
+            
             // Update graph title based on M4 type
-            var m4TypeLabel = results.parameters_used.m4_type === 'external' ? 
-                'M₄ (External - North Sea)' : 'M₄ (Internal - Non-linear)';
             if (document.getElementById('graphM4Btn')) {
                 document.getElementById('graphM4Btn').title = m4TypeLabel;
+            }
+            
+            // If graph is open, update its title
+            if (currentGraphComponent === 'm4' || currentGraphComponent === 'ratio') {
+                showGraphComponent(currentGraphComponent);
             }
             document.getElementById('viscosityVal').textContent = results.parameters_used.Av.toFixed(4);
             document.getElementById('resultsPanel').classList.add('visible');
@@ -1144,14 +1156,20 @@
             document.getElementById('graphM4Btn').style.background = component === 'm4' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
             document.getElementById('graphRatioBtn').style.background = component === 'ratio' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
             
-            // Update title
+            // Update title with M4 type indicator
             var title = document.getElementById('graphTitle');
+            var m4TypeText = '';
+            if (currentResults && currentResults.parameters_used && currentResults.parameters_used.m4_type) {
+                m4TypeText = currentResults.parameters_used.m4_type === 'external' ? 
+                    ' (External - North Sea)' : ' (Internal - Non-linear)';
+            }
+            
             if (component === 'm2') {
                 title.textContent = 'M₂ Tidal Amplitude Along Network';
             } else if (component === 'm4') {
-                title.textContent = 'M₄ Internal Overtide Amplitude Along Network';
+                title.textContent = 'M₄ Tidal Amplitude Along Network' + m4TypeText;
             } else if (component === 'ratio') {
-                title.textContent = 'M₄/M₂ Ratio Along Network (Non-linearity Strength)';
+                title.textContent = 'M₄/M₂ Ratio Along Network' + m4TypeText;
             }
             
             // Replot with new component
