@@ -612,6 +612,16 @@
         </div>
     </div>
     
+    <!-- Time Series Panel -->
+    <div class="graph-panel" id="timeSeriesPanel" style="display: none; position: absolute; bottom: 20px; right: 20px; width: 700px; background: rgba(15, 23, 42, 0.97); padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); z-index: 999; border: 1px solid rgba(56, 189, 248, 0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="color: #38bdf8; margin: 0; font-size: 16px;" id="timeSeriesTitle">Time Series at Location</h3>
+            <button onclick="closeTimeSeries()" style="background: transparent; border: none; color: #38bdf8; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
+        </div>
+        <div style="text-align: center; color: #cbd5e1; font-size: 12px; margin-bottom: 10px;" id="timeSeriesInfo"></div>
+        <canvas id="timeSeriesCanvas" width="660" height="300"></canvas>
+    </div>
+    
     <!-- Tooltip overlay -->
     <div id="graphTooltip" style="position: absolute; background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.5); pointer-events: none; display: none; z-index: 10000; font-size: 13px; line-height: 1.6; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);"></div>
 
@@ -663,7 +673,61 @@
                     smoothFactor: 1
                 }).addTo(map);
                 
-                line.bindPopup('<h4>' + ch.name + '</h4><p>Click "Run Simulation" to see tidal dynamics</p>');
+                line.bindPopup('<h4>' + ch.name + '</h4><p>Click to see time series at this channel</p>');
+                
+                // Add click event for time series
+                line.on('click', function(e) {
+                    if (!currentResults) {
+                        alert('Please run a simulation first!');
+                        return;
+                    }
+                    
+                    var channelName = ch.name;
+                    var apiName = channelMapping[channelName];
+                    
+                    if (!apiName || !currentResults.channels[apiName]) {
+                        alert('Channel data not available');
+                        return;
+                    }
+                    
+                    // Get channel data
+                    var channelData = currentResults.channels[apiName];
+                    
+                    // Find midpoint of channel for time series
+                    var midIndex = Math.floor(channelData.length / 2);
+                    var midPoint = channelData[midIndex];
+                    
+                    // Get M4 data if available
+                    var m4Point = null;
+                    if (currentResults.time_series_m4 && currentResults.time_series_m4.data[apiName]) {
+                        var m4Data = currentResults.time_series_m4.data[apiName].points;
+                        var m4MidIndex = Math.floor(m4Data.length / 2);
+                        m4Point = m4Data[m4MidIndex];
+                    }
+                    
+                    // Prepare data for plotting
+                    var m2Data = {
+                        amplitude: midPoint.eta.amplitude,
+                        phase: midPoint.eta.phase
+                    };
+                    
+                    var m4DataForPlot = null;
+                    if (m4Point) {
+                        m4DataForPlot = {
+                            amplitude: m4Point.amplitude,
+                            phase: m4Point.phase
+                        };
+                    }
+                    
+                    plotTimeSeries(
+                        apiName,
+                        channelName,
+                        midPoint.position_km || midPoint.position / 1000,
+                        m2Data,
+                        m4DataForPlot
+                    );
+                });
+                
                 channelLayers.push({layer: line, name: ch.name, data: ch});
             }
         }
@@ -1350,6 +1414,330 @@
             canvas.onmouseleave = function() {
                 tooltip.style.display = 'none';
             };
+            
+            // Add click handler for time series
+            canvas.onclick = function(e) {
+                var rect = canvas.getBoundingClientRect();
+                var mouseX = e.clientX - rect.left;
+                var mouseY = e.clientY - rect.top;
+                
+                // Check if mouse is within plot area
+                if (mouseX < padding.left || mouseX > canvas.width - padding.right ||
+                    mouseY < padding.top || mouseY > canvas.height - padding.bottom) {
+                    return;
+                }
+                
+                // Find closest point
+                var closestPoint = null;
+                var closestDist = Infinity;
+                var closestChannel = null;
+                
+                channelsToPlot.forEach(function(ch) {
+                    var data = channelDataCache[ch.key];
+                    if (data) {
+                        data.forEach(function(pt) {
+                            var x = scaleX(pt.position_km || pt.position / 1000);
+                            var y = scaleY(pt.eta.amplitude);
+                            var dist = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+                            
+                            if (dist < closestDist && dist < 20) {
+                                closestDist = dist;
+                                closestPoint = pt;
+                                closestChannel = ch;
+                            }
+                        });
+                    }
+                });
+                
+                if (closestPoint && closestChannel && currentResults) {
+                    // Get M2 and M4 data for this point
+                    var channelNames = {
+                        'nieuwe_waterweg': 'Nieuwe Waterweg',
+                        'hartelkanaal': 'Hartelkanaal',
+                        'nieuwe_maas': 'Nieuwe Maas',
+                        'nieuwe_merwede': 'Nieuwe Merwede',
+                        'oude_maas': 'Oude Maas',
+                        'waal': 'Waal',
+                        'haringvliet': 'Haringvliet'
+                    };
+                    
+                    // Get full channel data from results
+                    var m2ChannelData = currentResults.channels[closestChannel.key];
+                    
+                    // Find the exact point in full data
+                    var m2Point = null;
+                    var minDist = Infinity;
+                    m2ChannelData.forEach(function(pt) {
+                        var dist = Math.abs((pt.position_km || pt.position / 1000) - (closestPoint.position_km || closestPoint.position / 1000));
+                        if (dist < minDist) {
+                            minDist = dist;
+                            m2Point = pt;
+                        }
+                    });
+                    
+                    // Get M4 data for this channel and position
+                    var m4Point = null;
+                    if (currentResults.time_series_m4 && currentResults.time_series_m4.data[closestChannel.key]) {
+                        var m4Data = currentResults.time_series_m4.data[closestChannel.key].points;
+                        var minDist = Infinity;
+                        m4Data.forEach(function(pt) {
+                            var dist = Math.abs(pt.position_km - (closestPoint.position_km || closestPoint.position / 1000));
+                            if (dist < minDist) {
+                                minDist = dist;
+                                m4Point = pt;
+                            }
+                        });
+                    }
+                    
+                    // Prepare data for plotting
+                    var m2Data = {
+                        amplitude: m2Point.eta.amplitude,
+                        phase: m2Point.eta.phase
+                    };
+                    
+                    var m4Data = null;
+                    if (m4Point) {
+                        m4Data = {
+                            amplitude: m4Point.amplitude,
+                            phase: m4Point.phase
+                        };
+                    }
+                    
+                    plotTimeSeries(
+                        closestChannel.key,
+                        channelNames[closestChannel.key],
+                        closestPoint.position_km || closestPoint.position / 1000,
+                        m2Data,
+                        m4Data
+                    );
+                }
+            };
+        }
+        
+        function closeTimeSeries() {
+            document.getElementById('timeSeriesPanel').style.display = 'none';
+        }
+        
+        function plotTimeSeries(channelKey, channelName, positionKm, m2Data, m4Data) {
+            var panel = document.getElementById('timeSeriesPanel');
+            var canvas = document.getElementById('timeSeriesCanvas');
+            var ctx = canvas.getContext('2d');
+            var width = canvas.width;
+            var height = canvas.height;
+            
+            // Show panel
+            panel.style.display = 'block';
+            
+            // Update title and info
+            document.getElementById('timeSeriesTitle').textContent = 'Time Series at ' + channelName;
+            document.getElementById('timeSeriesInfo').textContent = 'Position: ' + positionKm.toFixed(2) + ' km | Click graph to close or select another location';
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            // Generate time series data
+            var numPoints = 200;
+            var periodM2 = 12.42; // hours
+            var periodM4 = periodM2 / 2; // M4 is half period of M2
+            var omega2 = 2 * Math.PI / (periodM2 * 3600); // rad/s
+            var omega4 = 2 * omega2; // M4 frequency is twice M2
+            
+            var timeData = [];
+            var etaM2 = [];
+            var etaM4 = [];
+            var etaTotal = [];
+            
+            for (var i = 0; i < numPoints; i++) {
+                var t = (i / numPoints) * periodM2 * 3600; // time in seconds
+                var tHours = t / 3600; // time in hours
+                timeData.push(tHours);
+                
+                // Calculate M2 component: eta = amplitude * cos(omega*t - phase)
+                var m2Val = m2Data.amplitude * Math.cos(omega2 * t - m2Data.phase);
+                etaM2.push(m2Val);
+                
+                // Calculate M4 component if available
+                var m4Val = 0;
+                if (m4Data && m4Data.amplitude) {
+                    m4Val = m4Data.amplitude * Math.cos(omega4 * t - m4Data.phase);
+                    etaM4.push(m4Val);
+                }
+                
+                // Total tide
+                etaTotal.push(m2Val + m4Val);
+            }
+            
+            // Find min/max for scaling
+            var maxEta = Math.max(Math.max.apply(null, etaTotal), Math.max.apply(null, etaM2));
+            var minEta = Math.min(Math.min.apply(null, etaTotal), Math.min.apply(null, etaM2));
+            var etaRange = maxEta - minEta;
+            
+            var padding = {left: 60, right: 30, top: 40, bottom: 50};
+            var plotWidth = width - padding.left - padding.right;
+            var plotHeight = height - padding.top - padding.bottom;
+            
+            // Scale functions
+            function scaleX(hours) {
+                return padding.left + (hours / periodM2) * plotWidth;
+            }
+            
+            function scaleY(eta) {
+                return padding.top + plotHeight - ((eta - minEta) / etaRange) * plotHeight;
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, height - padding.bottom);
+            ctx.lineTo(width - padding.right, height - padding.bottom);
+            ctx.stroke();
+            
+            // Draw grid
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 0.5;
+            
+            // Horizontal grid lines
+            for (var i = 0; i <= 5; i++) {
+                var y = padding.top + (i / 5) * plotHeight;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                var etaVal = maxEta - (i / 5) * etaRange;
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(etaVal.toFixed(2), padding.left - 5, y + 4);
+            }
+            
+            // Vertical grid lines (every 2 hours)
+            for (var i = 0; i <= 6; i++) {
+                var hours = i * 2;
+                var x = scaleX(hours);
+                ctx.strokeStyle = '#334155';
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, height - padding.bottom);
+                ctx.stroke();
+                
+                // X-axis labels
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(hours.toFixed(0) + 'h', x, height - padding.bottom + 20);
+            }
+            
+            // Axis labels
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Time (hours)', width / 2, height - 10);
+            
+            ctx.save();
+            ctx.translate(15, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Water Level (m)', 0, 0);
+            ctx.restore();
+            
+            // Plot M2 component (dashed blue line)
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            for (var i = 0; i < numPoints; i++) {
+                var x = scaleX(timeData[i]);
+                var y = scaleY(etaM2[i]);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Plot M4 component if available (dashed orange line)
+            if (m4Data && m4Data.amplitude > 0) {
+                ctx.strokeStyle = '#fb923c';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                for (var i = 0; i < numPoints; i++) {
+                    var x = scaleX(timeData[i]);
+                    var y = scaleY(etaM4[i]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Plot total tide (solid cyan line)
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (var i = 0; i < numPoints; i++) {
+                var x = scaleX(timeData[i]);
+                var y = scaleY(etaTotal[i]);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // Draw legend
+            var legendX = width - padding.right - 180;
+            var legendY = padding.top + 10;
+            
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            
+            // Total
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(legendX, legendY);
+            ctx.lineTo(legendX + 30, legendY);
+            ctx.stroke();
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText('M₂ + M₄', legendX + 35, legendY + 4);
+            
+            // M2
+            legendY += 20;
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(legendX, legendY);
+            ctx.lineTo(legendX + 30, legendY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText('M₂ only', legendX + 35, legendY + 4);
+            
+            // M4 if available
+            if (m4Data && m4Data.amplitude > 0) {
+                legendY += 20;
+                ctx.strokeStyle = '#fb923c';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(legendX, legendY);
+                ctx.lineTo(legendX + 30, legendY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillText('M₄ only', legendX + 35, legendY + 4);
+            }
         }
         
         function visualizeOnMap(results) {
