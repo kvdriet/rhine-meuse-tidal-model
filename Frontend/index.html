@@ -613,7 +613,7 @@
     </div>
     
     <!-- Time Series Panel -->
-    <div class="graph-panel" id="timeSeriesPanel" style="display: none; position: absolute; bottom: 20px; right: 20px; width: 700px; background: rgba(15, 23, 42, 0.97); padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); z-index: 999; border: 1px solid rgba(56, 189, 248, 0.3);">
+    <div class="graph-panel" id="timeSeriesPanel" style="display: none; position: absolute; top: 20px; right: 400px; width: 700px; background: rgba(15, 23, 42, 0.97); padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); z-index: 999; border: 1px solid rgba(56, 189, 248, 0.3); cursor: move;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <h3 style="color: #38bdf8; margin: 0; font-size: 16px;" id="timeSeriesTitle">Time Series at Location</h3>
             <button onclick="closeTimeSeries()" style="background: transparent; border: none; color: #38bdf8; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
@@ -1514,6 +1514,52 @@
             };
         }
         
+        var isDragging = false;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+        
+        function initDraggablePanel() {
+            var panel = document.getElementById('timeSeriesPanel');
+            var header = panel.querySelector('h3').parentElement;
+            
+            header.style.cursor = 'move';
+            
+            header.onmousedown = function(e) {
+                isDragging = true;
+                var rect = panel.getBoundingClientRect();
+                dragOffsetX = e.clientX - rect.left;
+                dragOffsetY = e.clientY - rect.top;
+                panel.style.cursor = 'grabbing';
+                header.style.cursor = 'grabbing';
+            };
+            
+            document.onmousemove = function(e) {
+                if (isDragging) {
+                    var panel = document.getElementById('timeSeriesPanel');
+                    var newLeft = e.clientX - dragOffsetX;
+                    var newTop = e.clientY - dragOffsetY;
+                    
+                    // Keep within window bounds
+                    newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - panel.offsetWidth));
+                    newTop = Math.max(0, Math.min(newTop, window.innerHeight - panel.offsetHeight));
+                    
+                    panel.style.left = newLeft + 'px';
+                    panel.style.top = newTop + 'px';
+                    panel.style.right = 'auto';
+                    panel.style.bottom = 'auto';
+                }
+            };
+            
+            document.onmouseup = function() {
+                if (isDragging) {
+                    isDragging = false;
+                    var panel = document.getElementById('timeSeriesPanel');
+                    panel.style.cursor = 'move';
+                    header.style.cursor = 'move';
+                }
+            };
+        }
+        
         function closeTimeSeries() {
             document.getElementById('timeSeriesPanel').style.display = 'none';
         }
@@ -1525,8 +1571,18 @@
             var width = canvas.width;
             var height = canvas.height;
             
-            // Show panel
-            panel.style.display = 'block';
+            // Clear canvas completely
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = 'rgba(15, 23, 42, 1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Show panel and initialize dragging if first time
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                initDraggablePanel();
+            } else {
+                panel.style.display = 'block';
+            }
             
             // Update title and info
             document.getElementById('timeSeriesTitle').textContent = 'Time Series at ' + channelName;
