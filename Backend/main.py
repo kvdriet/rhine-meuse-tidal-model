@@ -215,13 +215,6 @@ def run_tidal_model(params: ModelParameters):
         # Initialize model with parameters
         model = Network_model_RM(Av=Av, Sf=Sf)
         
-        # Set boundary amplitudes (M2 and M4 tidal forcing at ocean boundary)
-        ZM2 = params.zm2_amplitude if params.zm2_amplitude is not None else 0.80
-        ZM4 = params.zm4_amplitude if params.zm4_amplitude is not None else 0.20
-        model.ZM2 = ZM2
-        model.ZM4 = ZM4
-        print(f"Boundary amplitudes set - M2: {ZM2:.3f} m, M4: {ZM4:.3f} m")
-        
         # OPTIMIZATION: Reduce spatial resolution to save memory
         # This allows more animation frames for smoother propagation visualization
         model.N = 100  # Reduced from 500 to 100 (5x memory reduction)
@@ -245,10 +238,25 @@ def run_tidal_model(params: ModelParameters):
         model.H_m = model.H_m + depth_adj  # Middle channels (OM, NM, NE)
         model.H_o = model.H_o + depth_adj  # Ocean channels (NW, HK)
         
-        # Run M2 tide calculation
+        # Recreate z grids after depth adjustment
+        model.z_r = np.linspace(-model.H_r, 0, model.N)
+        model.z_o = np.linspace(-model.H_o, 0, model.N)
+        model.z_m = np.linspace(-model.H_m, 0, model.N)
+        
+        # Set desired boundary amplitudes with proper phase
+        ZM2_desired = params.zm2_amplitude if params.zm2_amplitude is not None else 0.80
+        ZM4_desired = params.zm4_amplitude if params.zm4_amplitude is not None else 0.20
+        print(f"Desired boundary amplitudes - M2: {ZM2_desired:.3f} m, M4: {ZM4_desired:.3f} m")
+        
+        # Set ZM2 BEFORE calling M2() - use complex exponential with proper phase
+        # Default phase is -0.95 rad for M2
+        model.ZM2 = ZM2_desired * np.exp(-1j*0.95)
+        print(f"Set model.ZM2 = {np.abs(model.ZM2):.3f} m with phase {np.angle(model.ZM2):.3f} rad")
+        
+        # Run M2 tide calculation (will use our pre-set ZM2)
         model.M2()
         
-        # Store M2 results
+        # Store M2 results (no scaling needed!)
         eta0_m2_river = model.eta0_r.copy()
         eta0_m2_ocean = model.eta0_o.copy()
         eta0_m2_middle = model.eta0_m.copy()
@@ -259,7 +267,14 @@ def run_tidal_model(params: ModelParameters):
         if m4_type == 'external':
             # EXTERNAL M4 from North Sea boundary
             print("Calculating external M4 (North Sea boundary)...")
-            model.M2(M4="yes")  # Run with external M4 - this returns ONLY M4 in eta0_r/o/m
+            
+            # Set ZM2 for external M4 calculation (actually contains M4 forcing)
+            # Default phase is -1.87 rad for external M4
+            model.ZM2 = ZM4_desired * np.exp(-2j*1.87)
+            print(f"Set model.ZM2 = {np.abs(model.ZM2):.3f} m for external M4 calculation")
+            
+            # Run with external M4 - this returns ONLY M4 in eta0_r/o/m
+            model.M2(M4="yes")
             
             # NOW eta0_r, eta0_o, eta0_m contain ONLY external M4 (NOT M2+M4!)
             eta0_m4_river = model.eta0_r.copy()
@@ -670,8 +685,8 @@ def run_tidal_model(params: ModelParameters):
                 "Av": float(Av),
                 "depth_adjustment": float(depth_adj),
                 "m4_type": m4_type,
-                "zm2_amplitude": float(ZM2),
-                "zm4_amplitude": float(ZM4)
+                "zm2_amplitude": float(ZM2_desired),
+                "zm4_amplitude": float(ZM4_desired)
             },
             "max_amplitude": float(np.max(np.abs(model.eta0_r))),
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),

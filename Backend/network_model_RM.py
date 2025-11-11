@@ -61,14 +61,19 @@ class Network_model_RM():
         self.u_o = np.zeros((len(self.x_o),len(self.t)))
 
     def M2(self, M4 = "no"):
+        # Determine if we're calculating M4 based on M4 parameter
         if M4 == "yes":
             a_M4 = 2
             b_M4 = 4
-            self.ZM2 = 0.20*np.exp(-2j*1.87)
+            # Only set ZM2 if not already set externally
+            if not hasattr(self, 'ZM2') or self.ZM2 is None:
+                self.ZM2 = 0.20*np.exp(-2j*1.87)  # Default external M4
         else:
             a_M4 = 1
             b_M4 = 1
-            self.ZM2 = 0.80*np.exp(-1j*0.95)
+            # Only set ZM2 if not already set externally
+            if not hasattr(self, 'ZM2') or self.ZM2 is None:
+                self.ZM2 = 0.80*np.exp(-1j*0.95)  # Default M2
         
         self.gamma_r = np.sqrt(-1j * self.omega*a_M4 / self.Av_r)
         self.alpha_r = self.Sf_r/(self.Sf_r * np.cosh(self.gamma_r*self.H_r) + self.Av_r * self.gamma_r * np.sinh(self.gamma_r*self.H_r))
@@ -789,5 +794,3 @@ class Network_model_RM():
         eta_p_o = self.Ao * np.exp(self.p1_o*self.x_o) + self.Bo * np.exp(self.p2_o*self.x_o)
         eta_14_o = eta_h_o + eta_p_o
         return eta_14_r, eta_14_m, eta_14_o
-        
-        
