@@ -2226,6 +2226,93 @@
             }
         }
 
+        function drawVelocityVectors(frameIndex) {
+            console.log('drawVelocityVectors called, frame:', frameIndex);
+            if (!showVelocityVectors || !currentResults) {
+                console.log('Skipping vectors - showVelocityVectors:', showVelocityVectors, 'currentResults:', !!currentResults);
+                return;
+            }
+            
+            // Remove old vector layer
+            if (velocityVectorLayer) {
+                map.removeLayer(velocityVectorLayer);
+            }
+            
+            velocityVectorLayer = L.layerGroup().addTo(map);
+            console.log('Created new velocity vector layer');
+            
+            var channelNames = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 
+                               'nieuwe_merwede', 'oude_maas', 'waal', 'haringvliet'];
+            
+            var t = frameIndex / 60 * 2 * Math.PI; // Phase for this frame
+            console.log('Time phase:', t);
+            
+            var vectorCount = 0;
+            
+            channelNames.forEach(function(chName) {
+                var channelData = currentResults.channels[chName];
+                if (!channelData) {
+                    console.log('No data for channel:', chName);
+                    return;
+                }
+                
+                console.log('Processing channel:', chName, 'points:', channelData.length);
+                
+                // Sample every Nth point to avoid cluttering
+                var skipPoints = Math.max(5, Math.floor(channelData.length / 10));
+                
+                for (var i = 0; i < channelData.length; i += skipPoints) {
+                    var point = channelData[i];
+                    
+                    // Get velocity
+                    var velAmp = point.velocity.amplitude;
+                    var velPhase = point.velocity.phase;
+                    
+                    // Calculate instantaneous velocity
+                    var uVal = velAmp * Math.cos(t - velPhase);
+                    
+                    // Skip if velocity is too small
+                    if (Math.abs(uVal) < 0.05) continue;
+                    
+                    // Find corresponding lat/lon on the channel
+                    var channelLayer = channelLayers.find(function(cl) {
+                        return channelMapping[cl.name] === chName;
+                    });
+                    
+                    if (!channelLayer) {
+                        console.log('No channel layer found for:', chName);
+                        continue;
+                    }
+                    
+                    var coords = channelLayer.data.coords;
+                    if (!coords || coords.length === 0) continue;
+                    
+                    // Get position along channel
+                    var pointIndex = Math.floor((i / channelData.length) * (coords.length - 1));
+                    pointIndex = Math.max(0, Math.min(pointIndex, coords.length - 1));
+                    var latLng = coords[pointIndex];
+                    
+                    // Arrow properties
+                    var arrowColor = uVal > 0 ? '#00ff00' : '#ff0000';
+                    var arrowSize = Math.min(Math.abs(uVal) * 5, 15); // Limit max size
+                    
+                    // Simple circle marker for now to test
+                    var marker = L.circleMarker([latLng[0], latLng[1]], {
+                        radius: arrowSize,
+                        fillColor: arrowColor,
+                        fillOpacity: 0.6,
+                        color: '#ffffff',
+                        weight: 1
+                    }).bindPopup('Velocity: ' + uVal.toFixed(3) + ' m/s');
+                    
+                    velocityVectorLayer.addLayer(marker);
+                    vectorCount++;
+                }
+            });
+            
+            console.log('Drew', vectorCount, 'velocity vectors');
+        }
+        
         function updateVisualization(frameIndex) {
             if (!animationData || !channelLayers) return;
             
