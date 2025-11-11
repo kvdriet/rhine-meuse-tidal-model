@@ -483,6 +483,37 @@
         </div>
         
         <div class="control-section">
+            <h3>Tidal Boundary Forcing</h3>
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>M₂ Amplitude (North Sea)</span>
+                    <span class="slider-value" id="zm2Value">0.80 m</span>
+                </div>
+                <input type="range" id="zm2Slider" min="0.3" max="1.5" step="0.05" value="0.80">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-top: 4px;">
+                    <span>0.3 m</span>
+                    <span>Baseline (0.80 m)</span>
+                    <span>1.5 m</span>
+                </div>
+            </div>
+            <div class="slider-container" style="margin-top: 15px;">
+                <div class="slider-label">
+                    <span>M₄ Amplitude (North Sea)</span>
+                    <span class="slider-value" id="zm4Value">0.20 m</span>
+                </div>
+                <input type="range" id="zm4Slider" min="0.0" max="0.5" step="0.02" value="0.20">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-top: 4px;">
+                    <span>0.0 m</span>
+                    <span>Baseline (0.20 m)</span>
+                    <span>0.5 m</span>
+                </div>
+            </div>
+            <div style="margin-top: 10px; padding: 10px; background: rgba(56, 189, 248, 0.1); border-radius: 6px; font-size: 11px; color: #94a3b8;">
+                Controls tidal forcing at ocean boundary. Higher values = stronger tides propagating inland.
+            </div>
+        </div>
+        
+        <div class="control-section">
             <h3>Eddy Viscosity</h3>
             <div class="radio-group" id="viscosityGroup">
                 <label class="radio-option">
@@ -550,6 +581,10 @@
         <div class="result-item">
             <span class="result-label">M₄ Type:</span>
             <span class="result-value" id="m4TypeVal">-</span>
+        </div>
+        <div class="result-item">
+            <span class="result-label">ZM₂ / ZM₄:</span>
+            <span class="result-value" id="boundaryAmpsVal">-</span>
         </div>
         <button class="view-graph-btn" onclick="showAmplitudeGraph()">📈 View Amplitude Graph</button>
         <button class="view-graph-btn" onclick="showVelocityStructure()" style="margin-top: 10px;">🌀 View Velocity Structure</button>
@@ -764,6 +799,14 @@
             document.getElementById('depthValue').textContent = e.target.value + ' m';
         });
         
+        document.getElementById('zm2Slider').addEventListener('input', function(e) {
+            document.getElementById('zm2Value').textContent = e.target.value + ' m';
+        });
+        
+        document.getElementById('zm4Slider').addEventListener('input', function(e) {
+            document.getElementById('zm4Value').textContent = e.target.value + ' m';
+        });
+        
         document.querySelectorAll('.radio-option').forEach(function(option) {
             option.addEventListener('click', function() {
                 var radio = this.querySelector('input[type="radio"]');
@@ -800,8 +843,10 @@
             var viscosity = document.querySelector('input[name="viscosity"]:checked').value;
             var depth = parseFloat(document.getElementById('depthSlider').value);
             var m4Type = document.querySelector('input[name="m4_type"]:checked').value;
+            var zm2 = parseFloat(document.getElementById('zm2Slider').value);
+            var zm4 = parseFloat(document.getElementById('zm4Slider').value);
             
-            console.log('Running model with M4 type:', m4Type);
+            console.log('Running model with M4 type:', m4Type, 'ZM2:', zm2, 'ZM4:', zm4);
             
             var button = document.querySelector('.run-button');
             var overlay = document.getElementById('loadingOverlay');
@@ -818,7 +863,9 @@
                         friction_level: friction,
                         depth_adjustment: depth,
                         viscosity_level: viscosity,
-                        m4_type: m4Type
+                        m4_type: m4Type,
+                        zm2_amplitude: zm2,
+                        zm4_amplitude: zm4
                     })
                 });
                 
@@ -848,6 +895,11 @@
             var m4Type = results.parameters_used.m4_type || 'internal';
             var m4TypeLabel = m4Type === 'external' ? 'External (North Sea)' : 'Internal (Non-linear)';
             document.getElementById('m4TypeVal').textContent = m4TypeLabel;
+            
+            // Display boundary amplitudes
+            var zm2 = results.parameters_used.zm2_amplitude || 0.80;
+            var zm4 = results.parameters_used.zm4_amplitude || 0.20;
+            document.getElementById('boundaryAmpsVal').textContent = zm2.toFixed(2) + ' / ' + zm4.toFixed(2) + ' m';
             
             // Update graph title based on M4 type
             if (document.getElementById('graphM4Btn')) {

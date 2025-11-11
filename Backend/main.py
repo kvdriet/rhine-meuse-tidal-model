@@ -30,6 +30,8 @@ class ModelParameters(BaseModel):
     viscosity_level: str  # 'very_low', 'low', 'baseline', 'high', 'very_high'
     scenario: Optional[str] = None  # 'drought', 'baseline', 'high_flow', 'dredged'
     m4_type: Optional[str] = 'internal'  # 'internal' (non-linear) or 'external' (North Sea boundary)
+    zm2_amplitude: Optional[float] = 0.80  # M2 boundary amplitude in meters
+    zm4_amplitude: Optional[float] = 0.20  # M4 boundary amplitude in meters
 
 class TidalResults(BaseModel):
     """Output results from the model"""
@@ -660,7 +662,9 @@ def run_tidal_model(params: ModelParameters):
                 "Sf": float(Sf),
                 "Av": float(Av),
                 "depth_adjustment": float(depth_adj),
-                "m4_type": m4_type
+                "m4_type": m4_type,
+                "zm2_amplitude": float(zm2),
+                "zm4_amplitude": float(zm4)
             },
             "max_amplitude": float(np.max(np.abs(model.eta0_r))),
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
