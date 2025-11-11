@@ -562,6 +562,7 @@
             <button class="animation-btn" onclick="showGraphComponent('m2')" id="graphM2Btn" style="background: rgba(56, 189, 248, 0.3); padding: 8px 16px;">M₂</button>
             <button class="animation-btn" onclick="showGraphComponent('m4')" id="graphM4Btn" style="padding: 8px 16px;">M₄</button>
             <button class="animation-btn" onclick="showGraphComponent('ratio')" id="graphRatioBtn" style="padding: 8px 16px;">M₄/M₂ Ratio</button>
+            <button class="animation-btn" onclick="showGraphComponent('asymmetry')" id="graphAsymBtn" style="padding: 8px 16px;">⚡ Asymmetry</button>
         </div>
         <canvas id="amplitudeCanvas" width="800" height="450"></canvas>
     </div>
@@ -1155,6 +1156,7 @@
             document.getElementById('graphM2Btn').style.background = component === 'm2' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
             document.getElementById('graphM4Btn').style.background = component === 'm4' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
             document.getElementById('graphRatioBtn').style.background = component === 'ratio' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
+            document.getElementById('graphAsymBtn').style.background = component === 'asymmetry' ? 'rgba(56, 189, 248, 0.3)' : 'transparent';
             
             // Update title with M4 type indicator
             var title = document.getElementById('graphTitle');
@@ -1170,6 +1172,8 @@
                 title.textContent = 'M₄ Tidal Amplitude Along Network' + m4TypeText;
             } else if (component === 'ratio') {
                 title.textContent = 'M₄/M₂ Ratio Along Network' + m4TypeText;
+            } else if (component === 'asymmetry') {
+                title.textContent = 'Tidal Asymmetry (Skewness) Along Network' + m4TypeText;
             }
             
             // Replot with new component
@@ -1224,6 +1228,20 @@
                             position_km: pt.position_km,
                             position: pt.position,
                             eta: { amplitude: pt.ratio }
+                        };
+                    });
+                } else if (currentGraphComponent === 'asymmetry' && results.asymmetry) {
+                    var asymData = results.asymmetry.data[channelKey];
+                    if (!asymData) return null;
+                    
+                    // Asymmetry data with skewness
+                    return asymData.points.map(function(pt) {
+                        return {
+                            position_km: pt.position_km,
+                            position: pt.position,
+                            eta: { amplitude: pt.skewness },
+                            horiz_asymmetry: pt.horiz_asymmetry,
+                            phase_difference: pt.phase_difference
                         };
                     });
                 }
@@ -1313,6 +1331,25 @@
                 ctx.fillText(xValue.toFixed(0), x, height - padding.bottom + 20);
             }
             
+            // Draw zero line for asymmetry plot
+            if (currentGraphComponent === 'asymmetry') {
+                var zeroY = scaleY(0);
+                ctx.strokeStyle = '#f59e0b';  // Orange color for zero line
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, zeroY);
+                ctx.lineTo(width - padding.right, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Label zero line
+                ctx.fillStyle = '#f59e0b';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText('Zero (balanced)', padding.left + 5, zeroY - 5);
+            }
+            
             // Axis labels
             ctx.fillStyle = '#cbd5e1';
             ctx.font = 'bold 14px Arial';
@@ -1324,7 +1361,8 @@
             ctx.rotate(-Math.PI / 2);
             var yLabel = currentGraphComponent === 'm2' ? 'M₂ elevation amplitude (m)' : 
                         currentGraphComponent === 'm4' ? 'M₄ elevation amplitude (m)' :
-                        'M₄/M₂ ratio';
+                        currentGraphComponent === 'ratio' ? 'M₄/M₂ ratio' :
+                        'Skewness (>0: flood, <0: ebb)';
             ctx.fillText(yLabel, 0, 0);
             ctx.restore();
             
@@ -1451,6 +1489,17 @@
                     if (currentGraphComponent === 'ratio') {
                         html += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(56, 189, 248, 0.3);">';
                         html += 'Ratio = M₄/M₂: ' + (closestPoint.eta.amplitude * 100).toFixed(2) + '%</div>';
+                    }
+                    
+                    // Add asymmetry info if applicable
+                    if (currentGraphComponent === 'asymmetry') {
+                        html += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(56, 189, 248, 0.3);">';
+                        html += 'Skewness: ' + closestPoint.eta.amplitude.toFixed(3);
+                        html += '<br>' + (closestPoint.eta.amplitude > 0 ? '▲ Flood dominant' : '▼ Ebb dominant');
+                        if (closestPoint.horiz_asymmetry !== undefined) {
+                            html += '<br>H. Asym: ' + closestPoint.horiz_asymmetry.toFixed(3);
+                        }
+                        html += '</div>';
                     }
                     
                     tooltip.innerHTML = html;

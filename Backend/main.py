@@ -291,6 +291,36 @@ def run_tidal_model(params: ModelParameters):
         eta0_ratio_ocean = np.abs(eta0_m4_ocean) / (np.abs(eta0_m2_ocean) + 1e-10)
         eta0_ratio_middle = np.abs(eta0_m4_middle) / (np.abs(eta0_m2_middle) + 1e-10)
         
+        # Calculate tidal asymmetry metrics
+        print("Calculating tidal asymmetry...")
+        
+        # Phase difference between M2 and M4 (critical for asymmetry)
+        # Asymmetry occurs when phi_M4 ≈ 2*phi_M2
+        phase_diff_river = 2 * np.angle(eta0_m2_river) - np.angle(eta0_m4_river)
+        phase_diff_ocean = 2 * np.angle(eta0_m2_ocean) - np.angle(eta0_m4_ocean)
+        phase_diff_middle = 2 * np.angle(eta0_m2_middle) - np.angle(eta0_m4_middle)
+        
+        # Normalize phase difference to [-π, π]
+        phase_diff_river = np.angle(np.exp(1j * phase_diff_river))
+        phase_diff_ocean = np.angle(np.exp(1j * phase_diff_ocean))
+        phase_diff_middle = np.angle(np.exp(1j * phase_diff_middle))
+        
+        # Skewness parameter (positive = flood dominant, negative = ebb dominant)
+        # Based on amplitude ratio and phase relationship
+        # When phase_diff ≈ 0: flood dominant, when phase_diff ≈ π: ebb dominant
+        skewness_river = eta0_ratio_river * np.cos(phase_diff_river)
+        skewness_ocean = eta0_ratio_ocean * np.cos(phase_diff_ocean)
+        skewness_middle = eta0_ratio_middle * np.cos(phase_diff_middle)
+        
+        # Horizontal asymmetry (based on M4/M2 ratio and phase)
+        # Positive: flood duration shorter (faster flooding)
+        # Negative: ebb duration shorter (faster ebbing)
+        horiz_asym_river = (np.abs(eta0_m4_river) / np.abs(eta0_m2_river)) * np.sin(phase_diff_river)
+        horiz_asym_ocean = (np.abs(eta0_m4_ocean) / np.abs(eta0_m2_ocean)) * np.sin(phase_diff_ocean)
+        horiz_asym_middle = (np.abs(eta0_m4_middle) / np.abs(eta0_m2_middle)) * np.sin(phase_diff_middle)
+        
+        print(f"Asymmetry calculated - River skewness range: [{np.min(skewness_river):.4f}, {np.max(skewness_river):.4f}]")
+        
         # Restore M2 results to model for main visualization
         model.eta0_r = eta0_m2_river
         model.eta0_o = eta0_m2_ocean
@@ -518,6 +548,75 @@ def run_tidal_model(params: ModelParameters):
                 'total_points': len(m2_full_data)
             }
         
+        # Process asymmetry data for each channel
+        asymmetry_data = {}
+        for ch_name in channel_names:
+            m2_full_data = channel_results_map[ch_name]
+            
+            # Get asymmetry arrays for this channel
+            if ch_name == 'waal':
+                skewness_arr = skewness_river[:, 0]
+                horiz_asym_arr = horiz_asym_river[:, 0]
+                phase_diff_arr = phase_diff_river[:, 0]
+            elif ch_name == 'haringvliet':
+                skewness_arr = skewness_river[::-1, 1]  # Reversed
+                horiz_asym_arr = horiz_asym_river[::-1, 1]
+                phase_diff_arr = phase_diff_river[::-1, 1]
+            elif ch_name == 'nieuwe_waterweg':
+                skewness_arr = skewness_ocean[:, 0]
+                horiz_asym_arr = horiz_asym_ocean[:, 0]
+                phase_diff_arr = phase_diff_ocean[:, 0]
+            elif ch_name == 'hartelkanaal':
+                skewness_arr = skewness_ocean[:, 1]
+                horiz_asym_arr = horiz_asym_ocean[:, 1]
+                phase_diff_arr = phase_diff_ocean[:, 1]
+            elif ch_name == 'nieuwe_maas':
+                skewness_arr = skewness_middle[:, 0]
+                horiz_asym_arr = horiz_asym_middle[:, 0]
+                phase_diff_arr = phase_diff_middle[:, 0]
+            elif ch_name == 'nieuwe_merwede':
+                skewness_arr = skewness_middle[:, 1]
+                horiz_asym_arr = horiz_asym_middle[:, 1]
+                phase_diff_arr = phase_diff_middle[:, 1]
+            elif ch_name == 'oude_maas':
+                skewness_arr = skewness_middle[:, 2]
+                horiz_asym_arr = horiz_asym_middle[:, 2]
+                phase_diff_arr = phase_diff_middle[:, 2]
+            
+            # Downsample asymmetry data to match M4 data points
+            asym_points = []
+            for idx, i in enumerate(range(0, len(m2_full_data), downsample)):
+                if i >= len(skewness_arr):
+                    break
+                
+                m2_pt = m2_full_data[i]
+                asym_points.append({
+                    'position': m2_pt['position'],
+                    'position_km': m2_pt['position_km'],
+                    'skewness': float(skewness_arr[i]),  # >0: flood dominant, <0: ebb dominant
+                    'horiz_asymmetry': float(horiz_asym_arr[i]),  # temporal asymmetry
+                    'phase_difference': float(phase_diff_arr[i]),  # 2*phi_M2 - phi_M4
+                    'index': i
+                })
+            
+            asymmetry_data[ch_name] = {
+                'points': asym_points,
+                'total_points': len(m2_full_data)
+            }
+        
+        # Calculate global min/max for asymmetry
+        all_skewness = []
+        all_horiz_asym = []
+        for ch_name in channel_names:
+            for point in asymmetry_data[ch_name]['points']:
+                all_skewness.append(point['skewness'])
+                all_horiz_asym.append(point['horiz_asymmetry'])
+        
+        global_min_skewness = min(all_skewness) if all_skewness else -0.5
+        global_max_skewness = max(all_skewness) if all_skewness else 0.5
+        global_min_horiz = min(all_horiz_asym) if all_horiz_asym else -0.5
+        global_max_horiz = max(all_horiz_asym) if all_horiz_asym else 0.5
+        
         # Calculate global min/max for M4
         all_amplitudes_m4 = []
         for ch_name in channel_names:
@@ -588,6 +687,14 @@ def run_tidal_model(params: ModelParameters):
                 "global_min": float(global_min_ratio),
                 "global_max": float(global_max_ratio),
                 "description": "M4/M2 amplitude ratio showing non-linear effects"
+            },
+            "asymmetry": {
+                "data": asymmetry_data,
+                "global_min_skewness": float(global_min_skewness),
+                "global_max_skewness": float(global_max_skewness),
+                "global_min_horiz": float(global_min_horiz),
+                "global_max_horiz": float(global_max_horiz),
+                "description": "Tidal asymmetry: skewness (>0=flood dominant, <0=ebb dominant) and horizontal asymmetry"
             },
             "velocity_structure": {
                 "ocean": {
