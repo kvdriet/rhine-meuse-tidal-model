@@ -1183,6 +1183,14 @@
         }
         
         function plotAmplitudeGraph(results) {
+            console.log('plotAmplitudeGraph called with component:', currentGraphComponent);
+            if (currentGraphComponent === 'asymmetry') {
+                console.log('Asymmetry data available:', !!results.asymmetry);
+                if (results.asymmetry) {
+                    console.log('Asymmetry data keys:', Object.keys(results.asymmetry.data));
+                }
+            }
+            
             var canvas = document.getElementById('amplitudeCanvas');
             var ctx = canvas.getContext('2d');
             var width = canvas.width;
@@ -1231,8 +1239,17 @@
                         };
                     });
                 } else if (currentGraphComponent === 'asymmetry' && results.asymmetry) {
+                    console.log('Getting asymmetry data for channel:', channelKey);
                     var asymData = results.asymmetry.data[channelKey];
-                    if (!asymData) return null;
+                    if (!asymData) {
+                        console.log('No asymmetry data for channel:', channelKey);
+                        return null;
+                    }
+                    
+                    console.log('Asymmetry points for', channelKey, ':', asymData.points.length);
+                    if (asymData.points.length > 0) {
+                        console.log('First asymmetry point:', asymData.points[0]);
+                    }
                     
                     // Asymmetry data with skewness
                     return asymData.points.map(function(pt) {
