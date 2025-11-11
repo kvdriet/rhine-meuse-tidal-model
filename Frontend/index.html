@@ -2320,21 +2320,25 @@
                     var endLat = latLng[0] + dy;
                     var endLng = latLng[1] + dx;
                     
-                    // Simplified arrow - just a small triangle marker (no shaft for cleaner look)
-                    var arrowSize = Math.min(Math.abs(uVal) * 3, 8); // Smaller arrows
+                    // Bigger arrow for better visibility
+                    var arrowSize = Math.min(Math.abs(uVal) * 8, 12); // Increased from 3 to 8
+                    arrowSize = Math.max(arrowSize, 6); // Minimum size of 6px
                     var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+                    
+                    console.log('Creating arrow at', latLng, 'size:', arrowSize, 'angle:', angle, 'color:', arrowColor);
                     
                     var arrowIcon = L.divIcon({
                         className: 'velocity-arrow',
-                        html: '<div style="width: 0; height: 0; border-left: ' + arrowSize + 'px solid transparent; border-right: ' + arrowSize + 'px solid transparent; border-bottom: ' + (arrowSize * 1.5) + 'px solid ' + arrowColor + '; transform: rotate(' + angle + 'deg); filter: drop-shadow(0 0 2px rgba(0,0,0,0.3));"></div>',
+                        html: '<div style="width: 0; height: 0; border-left: ' + arrowSize + 'px solid transparent; border-right: ' + arrowSize + 'px solid transparent; border-bottom: ' + (arrowSize * 1.8) + 'px solid ' + arrowColor + '; transform: rotate(' + angle + 'deg); filter: drop-shadow(0 0 3px rgba(0,0,0,0.5));"></div>',
                         iconSize: [arrowSize * 2, arrowSize * 2],
                         iconAnchor: [arrowSize, arrowSize * 1.5]
                     });
                     
                     var arrowMarker = L.marker([endLat, endLng], {
                         icon: arrowIcon,
-                        opacity: 0.7 // More transparent for discrete look
-                    }).bindPopup('<strong>' + chName.replace(/_/g, ' ').replace(/\w/g, function(l){ return l.toUpperCase() }) + '</strong><br>Velocity: ' + uVal.toFixed(3) + ' m/s<br>' + (uVal > 0 ? '🔵 Flood (upstream)' : '🔴 Ebb (downstream)'));
+                        opacity: 0.9, // More opaque
+                        zIndexOffset: 1000 // Ensure arrows appear on top
+                    }).bindPopup('<strong>' + chName.replace(/_/g, ' ').toUpperCase() + '</strong><br>Velocity: ' + uVal.toFixed(3) + ' m/s<br>' + (uVal > 0 ? '🔵 Flood (upstream)' : '🔴 Ebb (downstream)'));
                     
                     velocityVectorLayer.addLayer(arrowMarker);
                     vectorCount++;
