@@ -274,15 +274,17 @@ def run_tidal_model(params: ModelParameters):
             model.M4_total()  # Combine all M4 components
             model.full_tide(first_order="yes")  # Full tide solution
             
-            # Store internal M4 results (eta14 = M2 + M4)
-            eta14_river = model.eta14_r.copy()
-            eta14_ocean = model.eta14_o.copy()
-            eta14_middle = model.eta14_m.copy()
+            # eta14 contains ONLY internal M4 (not M2+M4)
+            eta0_m4_river = model.eta14_r.copy()
+            eta0_m4_ocean = model.eta14_o.copy()
+            eta0_m4_middle = model.eta14_m.copy()
             
-            # Extract M4 component
-            eta0_m4_river = model.eta0_r.copy() if hasattr(model, 'eta0_r') else eta14_river - eta0_m2_river
-            eta0_m4_ocean = model.eta0_o.copy() if hasattr(model, 'eta0_o') else eta14_ocean - eta0_m2_ocean
-            eta0_m4_middle = model.eta0_m.copy() if hasattr(model, 'eta0_m') else eta14_middle - eta0_m2_middle
+            # For full tide (M2+M4), add them together
+            eta14_river = eta0_m2_river + eta0_m4_river
+            eta14_ocean = eta0_m2_ocean + eta0_m4_ocean
+            eta14_middle = eta0_m2_middle + eta0_m4_middle
+            
+            print(f"Internal M4 max amplitudes - River: {np.max(np.abs(eta0_m4_river)):.4f}, Ocean: {np.max(np.abs(eta0_m4_ocean)):.4f}, Middle: {np.max(np.abs(eta0_m4_middle)):.4f}")
         
         # Calculate M4/M2 ratio (shows strength of non-linear effects)
         eta0_ratio_river = np.abs(eta0_m4_river) / (np.abs(eta0_m2_river) + 1e-10)
