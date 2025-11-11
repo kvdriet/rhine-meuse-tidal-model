@@ -1257,13 +1257,28 @@
                 var data = getAmplitudeData(ch.key);
                 if (data) {
                     data.forEach(function(pt) {
-                        maxAmp = Math.max(maxAmp, pt.eta.amplitude);
+                        var ampVal = Math.abs(pt.eta.amplitude);
+                        maxAmp = Math.max(maxAmp, ampVal);
                         var pos = pt.position_km || pt.position / 1000;
                         minPos = Math.min(minPos, pos);
                         maxPos = Math.max(maxPos, pos);
                     });
                 }
             });
+            
+            // For asymmetry, handle negative values properly
+            if (currentGraphComponent === 'asymmetry') {
+                var minAmp = 0;
+                channelsToPlot.forEach(function(ch) {
+                    var data = getAmplitudeData(ch.key);
+                    if (data) {
+                        data.forEach(function(pt) {
+                            minAmp = Math.min(minAmp, pt.eta.amplitude);
+                        });
+                    }
+                });
+                console.log('Asymmetry range:', minAmp, 'to', maxAmp);
+            }
             
             // Add padding to x-range (especially on left for negative values)
             var xRange = maxPos - minPos;
@@ -1280,7 +1295,22 @@
             }
             
             function scaleY(amp) {
-                return height - padding.bottom - (amp / (maxAmp * 1.05)) * plotHeight;  // Less padding on top
+                if (currentGraphComponent === 'asymmetry') {
+                    // Handle negative values for asymmetry
+                    var minAmp = 0;
+                    channelsToPlot.forEach(function(ch) {
+                        var data = getAmplitudeData(ch.key);
+                        if (data) {
+                            data.forEach(function(pt) {
+                                minAmp = Math.min(minAmp, pt.eta.amplitude);
+                            });
+                        }
+                    });
+                    var range = maxAmp - minAmp;
+                    return height - padding.bottom - ((amp - minAmp) / range) * plotHeight;
+                } else {
+                    return height - padding.bottom - (amp / (maxAmp * 1.05)) * plotHeight;  // Less padding on top
+                }
             }
             
             // Draw axes
@@ -1307,7 +1337,24 @@
                 ctx.fillStyle = '#cbd5e1';
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText((maxAmp * i / 5 * 1.05).toFixed(2), padding.left - 5, y + 4);
+                
+                if (currentGraphComponent === 'asymmetry') {
+                    // Calculate min for asymmetry
+                    var minAmp = 0;
+                    channelsToPlot.forEach(function(ch) {
+                        var data = getAmplitudeData(ch.key);
+                        if (data) {
+                            data.forEach(function(pt) {
+                                minAmp = Math.min(minAmp, pt.eta.amplitude);
+                            });
+                        }
+                    });
+                    var range = maxAmp - minAmp;
+                    var labelValue = minAmp + (i / 5) * range;
+                    ctx.fillText(labelValue.toFixed(3), padding.left - 5, y + 4);
+                } else {
+                    ctx.fillText((maxAmp * i / 5 * 1.05).toFixed(2), padding.left - 5, y + 4);
+                }
             }
             
             // X-axis grid and labels
