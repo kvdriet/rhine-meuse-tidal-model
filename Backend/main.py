@@ -663,8 +663,8 @@ def run_tidal_model(params: ModelParameters):
                 "Av": float(Av),
                 "depth_adjustment": float(depth_adj),
                 "m4_type": m4_type,
-                "zm2_amplitude": float(zm2),
-                "zm4_amplitude": float(zm4)
+                "zm2_amplitude": float(ZM2),
+                "zm4_amplitude": float(ZM4)
             },
             "max_amplitude": float(np.max(np.abs(model.eta0_r))),
             "phase_lag": float(np.angle(model.eta0_r[-1, 0] if model.eta0_r.ndim > 1 else model.eta0_r[-1])),
