@@ -2292,57 +2292,51 @@
                     pointIndex = Math.max(0, Math.min(pointIndex, coords.length - 1));
                     var latLng = coords[pointIndex];
                     
-                    // Arrow properties
-                    var arrowColor = uVal > 0 ? '#00ff00' : '#ff0000'; // Green=flood, Red=ebb
-                    var arrowLength = Math.min(Math.abs(uVal) * 0.003, 0.02); // Scale in degrees
+                    // Arrow properties - blue for high water (flood), red for low water (ebb)
+                    var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
+                    var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Get direction along channel
-                    var direction = uVal > 0 ? -1 : 1; // Positive velocity = upstream (toward lower index)
-                    var nextIndex = pointIndex + direction;
+                    // Get direction along channel - use multiple points for better alignment
+                    var direction = uVal > 0 ? -1 : 1; // Positive velocity = upstream
+                    var lookAhead = Math.min(5, Math.floor(coords.length / 20)); // Look several points ahead
+                    var nextIndex = pointIndex + (direction * lookAhead);
                     nextIndex = Math.max(0, Math.min(nextIndex, coords.length - 1));
                     
-                    if (nextIndex === pointIndex) continue; // Skip if at boundary
+                    if (nextIndex === pointIndex) continue;
                     
                     var nextLatLng = coords[nextIndex];
                     
-                    // Calculate arrow vector
+                    // Calculate arrow vector along channel
                     var dx = nextLatLng[1] - latLng[1];
                     var dy = nextLatLng[0] - latLng[0];
                     var dist = Math.sqrt(dx*dx + dy*dy);
                     
                     if (dist < 0.0001) continue;
                     
-                    // Normalize and scale
+                    // Normalize and scale - make arrows smaller and more subtle
                     dx = dx / dist * arrowLength;
                     dy = dy / dist * arrowLength;
                     
                     var endLat = latLng[0] + dy;
                     var endLng = latLng[1] + dx;
                     
-                    // Draw arrow shaft
-                    var arrow = L.polyline(
-                        [[latLng[0], latLng[1]], [endLat, endLng]],
-                        {
-                            color: arrowColor,
-                            weight: 3,
-                            opacity: 0.8
-                        }
-                    );
+                    // Simplified arrow - just a small triangle marker (no shaft for cleaner look)
+                    var arrowSize = Math.min(Math.abs(uVal) * 3, 8); // Smaller arrows
+                    var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
                     
-                    // Create arrowhead using a triangle marker
                     var arrowIcon = L.divIcon({
                         className: 'velocity-arrow',
-                        html: '<div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 12px solid ' + arrowColor + '; transform: rotate(' + (Math.atan2(dx, -dy) * 180 / Math.PI) + 'deg); transform-origin: center;"></div>',
-                        iconSize: [16, 16],
-                        iconAnchor: [8, 16]
+                        html: '<div style="width: 0; height: 0; border-left: ' + arrowSize + 'px solid transparent; border-right: ' + arrowSize + 'px solid transparent; border-bottom: ' + (arrowSize * 1.5) + 'px solid ' + arrowColor + '; transform: rotate(' + angle + 'deg); filter: drop-shadow(0 0 2px rgba(0,0,0,0.3));"></div>',
+                        iconSize: [arrowSize * 2, arrowSize * 2],
+                        iconAnchor: [arrowSize, arrowSize * 1.5]
                     });
                     
-                    var arrowhead = L.marker([endLat, endLng], {
-                        icon: arrowIcon
-                    }).bindPopup('<strong>' + channelNames.find(function(ch) { return channelMapping[ch] === chName; }) + '</strong><br>Velocity: ' + uVal.toFixed(3) + ' m/s<br>' + (uVal > 0 ? '▲ Flood (upstream)' : '▼ Ebb (downstream)'));
+                    var arrowMarker = L.marker([endLat, endLng], {
+                        icon: arrowIcon,
+                        opacity: 0.7 // More transparent for discrete look
+                    }).bindPopup('<strong>' + chName.replace(/_/g, ' ').replace(/\w/g, function(l){ return l.toUpperCase() }) + '</strong><br>Velocity: ' + uVal.toFixed(3) + ' m/s<br>' + (uVal > 0 ? '🔵 Flood (upstream)' : '🔴 Ebb (downstream)'));
                     
-                    velocityVectorLayer.addLayer(arrow);
-                    velocityVectorLayer.addLayer(arrowhead);
+                    velocityVectorLayer.addLayer(arrowMarker);
                     vectorCount++;
                 }
             });
