@@ -215,6 +215,13 @@ def run_tidal_model(params: ModelParameters):
         # Initialize model with parameters
         model = Network_model_RM(Av=Av, Sf=Sf)
         
+        # Set boundary amplitudes (M2 and M4 tidal forcing at ocean boundary)
+        ZM2 = params.zm2_amplitude if params.zm2_amplitude is not None else 0.80
+        ZM4 = params.zm4_amplitude if params.zm4_amplitude is not None else 0.20
+        model.ZM2 = ZM2
+        model.ZM4 = ZM4
+        print(f"Boundary amplitudes set - M2: {ZM2:.3f} m, M4: {ZM4:.3f} m")
+        
         # OPTIMIZATION: Reduce spatial resolution to save memory
         # This allows more animation frames for smoother propagation visualization
         model.N = 100  # Reduced from 500 to 100 (5x memory reduction)
