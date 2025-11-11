@@ -1790,12 +1790,12 @@
         
         function toggleVelocityVectors(show) {
             showVelocityVectors = show;
+            console.log('toggleVelocityVectors:', show);
             if (!show && velocityVectorLayer) {
                 map.removeLayer(velocityVectorLayer);
                 velocityVectorLayer = null;
-            } else if (show && currentResults && animationPlaying) {
-                // Vectors will be drawn during animation
             }
+            // Vectors will be drawn during next animation frame if enabled
         }
         
         function plotTimeSeries(channelKey, channelName, positionKm, m2Data, m4Data) {
