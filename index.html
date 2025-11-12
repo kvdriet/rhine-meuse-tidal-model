@@ -2278,10 +2278,8 @@
                     indices.push(idx);
                 }
                 
-                // For ocean channels: reverse the indices so animation goes ocean->river (reversed x)
-                if (isOceanChannel) {
-                    indices = indices.reverse();
-                }
+                // Reverse indices for ALL channels due to reversed x-axis
+                indices = indices.reverse();
                 
                 // Draw arrows in correct order
                 for (var idx_i = 0; idx_i < indices.length; idx_i++) {
@@ -2312,15 +2310,11 @@
                     if (!coords || coords.length === 0) continue;
                     
                     // Get position along channel
-                    // CRITICAL: For ocean channels, coords and channelData are in opposite order!
-                    // Ocean channels: channelData[0]=ocean but coords[0]=inland
-                    // So we need to reverse the coordinate mapping for ocean channels
+                    // Model x-axis is reversed for ALL channels: coords need to be reversed
                     var pointIndex = Math.floor((i / channelData.length) * (coords.length - 1));
                     
-                    // Reverse coordinate mapping for ocean channels
-                    if (isOceanChannel) {
-                        pointIndex = (coords.length - 1) - pointIndex;
-                    }
+                    // Reverse coordinate mapping for ALL channels
+                    pointIndex = (coords.length - 1) - pointIndex;
                     
                     pointIndex = Math.max(0, Math.min(pointIndex, coords.length - 1));
                     var latLng = coords[pointIndex];
