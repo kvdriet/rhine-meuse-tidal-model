@@ -2323,40 +2323,46 @@
                     var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
                     var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Calculate arrow direction along the channel path
-                    var lookAhead = Math.max(3, Math.floor(coords.length / 30));
+                    // Calculate arrow direction from local line segment
+                    // Use adjacent points to get accurate line direction at this location
+                    var prevIndex = Math.max(0, pointIndex - 1);
+                    var nextIndex = Math.min(coords.length - 1, pointIndex + 1);
                     
-                    // After coordinate reversal, determine direction to look along coords
-                    // We need to figure out which channels need flipping
-                    var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
-                    var flipChannels = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal'];
+                    if (prevIndex === nextIndex) continue;
                     
-                    var needsFlip = flipChannels.includes(chName);
-                    var baseDirection = uVal > 0 ? 1 : -1;  // Positive u forward, negative u backward
-                    
-                    // Flip direction for channels that need it
-                    var directionMultiplier = needsFlip ? -baseDirection : baseDirection;
-                    
-                    var nextIndex = pointIndex + (directionMultiplier * lookAhead);
-                    nextIndex = Math.max(0, Math.min(nextIndex, coords.length - 1));
-                    
-                    if (nextIndex === pointIndex) continue;
-                    
+                    var prevLatLng = coords[prevIndex];
                     var nextLatLng = coords[nextIndex];
                     
-                    // Calculate vector from current to next point
-                    var dx = nextLatLng[1] - latLng[1];  // Longitude difference
-                    var dy = nextLatLng[0] - latLng[0];  // Latitude difference
+                    // Calculate local line direction (tangent vector)
+                    var dx = nextLatLng[1] - prevLatLng[1];  // Longitude difference
+                    var dy = nextLatLng[0] - prevLatLng[0];  // Latitude difference
                     var dist = Math.sqrt(dx*dx + dy*dy);
                     
                     if (dist < 0.0001) continue;
                     
-                    // Calculate angle - arrow points in direction of vector
-                    var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    // Calculate angle from line direction
+                    var baseAngle = Math.atan2(dy, dx) * 180 / Math.PI;
                     
-                    // Arrow size based on velocity - smaller than before
-                    var arrowSize = Math.min(Math.abs(uVal) * 6, 10);
-                    arrowSize = Math.max(arrowSize, 5);
+                    // Determine if arrow should be flipped 180° based on flow direction and channel type
+                    var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
+                    var flipChannels = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal'];
+                    
+                    var needsFlip = flipChannels.includes(chName);
+                    
+                    // Positive u = flood (should point inland)
+                    // Negative u = ebb (should point seaward)
+                    var angle = baseAngle;
+                    if (uVal > 0) {
+                        // Flood: flip for channels that need it
+                        if (needsFlip) angle += 180;
+                    } else {
+                        // Ebb: flip opposite channels
+                        if (!needsFlip) angle += 180;
+                    }
+                    
+                    // Arrow size based on velocity - slightly bigger
+                    var arrowSize = Math.min(Math.abs(uVal) * 8, 12);
+                    arrowSize = Math.max(arrowSize, 6);
                     
                     var arrowIcon = L.divIcon({
                         className: 'velocity-arrow',
