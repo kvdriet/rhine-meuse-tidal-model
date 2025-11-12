@@ -669,9 +669,9 @@
         <div class="color-legend">
             <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;" id="colorLegendLabel">M₂ Elevation:</label>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMin">Low</span>
-                <div id="colorLegendGradient" style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(33,102,172), rgb(255,255,255), rgb(178,24,43)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
-                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMax">High</span>
+                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMin">Low Water</span>
+                <div id="colorLegendGradient" style="flex: 1; height: 20px; background: linear-gradient(to right, rgb(178,24,43), rgb(255,255,255), rgb(33,102,172)); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);"></div>
+                <span style="font-size: 11px; color: #94a3b8;" id="colorLegendMax">High Water</span>
             </div>
         </div>
     </div>
@@ -721,22 +721,22 @@
         
         function drawChannels() {
             var channels = [
-                {name: "Nieuwe Waterweg", color: "#00FFFF", weight: 5, coords: kmlData.nieuwewaterweg},
-                {name: "Hartelkanaal", color: "#FF00FF", weight: 5, coords: kmlData.hartelkanaal},
-                {name: "Haringvliet + Hollands Diep", color: "#007cf5", weight: 5, coords: kmlData.haringvliet},
-                {name: "Nieuwe Maas", color: "#173f5f", weight: 5, coords: kmlData.nieuwemaas},
-                {name: "Nieuwe Merwede", color: "#f6d55c", weight: 5, coords: kmlData.nm},
-                {name: "Oude Maas + Dordtsche Kil", color: "#19d276", weight: 5, coords: kmlData.oudemaas},
-                {name: "Waal", color: "#d3322f", weight: 5, coords: kmlData.waal}
+                {name: "Nieuwe Waterweg", color: "#00FFFF", neutralColor: "#94a3b8", weight: 5, coords: kmlData.nieuwewaterweg},
+                {name: "Hartelkanaal", color: "#FF00FF", neutralColor: "#94a3b8", weight: 5, coords: kmlData.hartelkanaal},
+                {name: "Haringvliet + Hollands Diep", color: "#007cf5", neutralColor: "#94a3b8", weight: 5, coords: kmlData.haringvliet},
+                {name: "Nieuwe Maas", color: "#173f5f", neutralColor: "#94a3b8", weight: 5, coords: kmlData.nieuwemaas},
+                {name: "Nieuwe Merwede", color: "#f6d55c", neutralColor: "#94a3b8", weight: 5, coords: kmlData.nm},
+                {name: "Oude Maas + Dordtsche Kil", color: "#19d276", neutralColor: "#94a3b8", weight: 5, coords: kmlData.oudemaas},
+                {name: "Waal", color: "#d3322f", neutralColor: "#94a3b8", weight: 5, coords: kmlData.waal}
             ];
             
             for (var i = 0; i < channels.length; i++) {
                 (function() {
                     var ch = channels[i];
                     var line = L.polyline(ch.coords, {
-                        color: ch.color,
+                        color: ch.neutralColor, // Start with neutral gray color
                         weight: ch.weight,
-                        opacity: 0.8,
+                        opacity: 0.7,
                         smoothFactor: 1
                     }).addTo(map);
                     
@@ -2296,8 +2296,8 @@
                     var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
                     var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Get direction along channel - use multiple points for better alignment
-                    var direction = uVal > 0 ? -1 : 1; // Positive velocity = upstream
+                    // Get direction along channel - REVERSED because model output is reversed
+                    var direction = uVal > 0 ? 1 : -1; // Positive velocity = upstream, but reversed in output
                     var lookAhead = Math.min(5, Math.floor(coords.length / 20)); // Look several points ahead
                     var nextIndex = pointIndex + (direction * lookAhead);
                     nextIndex = Math.max(0, Math.min(nextIndex, coords.length - 1));
