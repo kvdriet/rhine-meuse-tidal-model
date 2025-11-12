@@ -2323,45 +2323,40 @@
                     var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
                     var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Arrow direction depends on channel type and flow direction
+                    // Calculate arrow direction along the channel path
+                    var lookAhead = Math.max(3, Math.floor(coords.length / 30));
+                    
+                    // After coordinate reversal, determine direction to look along coords
+                    // We need to figure out which channels need flipping
                     var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
-                    var middleChannels = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas'];
-                    var needsFlip = ['waal']; // First river channel needs flip
+                    var flipChannels = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas', 'waal'];
                     
-                    var direction;
-                    if (oceanChannels.includes(chName)) {
-                        // Ocean channels: correct as is
-                        direction = uVal > 0 ? -1 : 1;  // Flood inland, Ebb seaward
-                    } else if (middleChannels.includes(chName) || needsFlip.includes(chName)) {
-                        // Middle channels and Waal: flip the direction
-                        direction = uVal > 0 ? 1 : -1;  // Flip for these channels
-                    } else {
-                        // Haringvliet: correct as is
-                        direction = uVal > 0 ? -1 : 1;  // Flood inland, Ebb seaward
-                    }
+                    var needsFlip = flipChannels.includes(chName);
+                    var baseDirection = uVal > 0 ? 1 : -1;  // Positive u forward, negative u backward
                     
-                    var lookAhead = Math.min(2, Math.floor(coords.length / 50)); // Look fewer points ahead to follow curves
-                    var nextIndex = pointIndex + (direction * lookAhead);
+                    // Flip direction for channels that need it
+                    var directionMultiplier = needsFlip ? -baseDirection : baseDirection;
+                    
+                    var nextIndex = pointIndex + (directionMultiplier * lookAhead);
                     nextIndex = Math.max(0, Math.min(nextIndex, coords.length - 1));
                     
                     if (nextIndex === pointIndex) continue;
                     
                     var nextLatLng = coords[nextIndex];
                     
-                    // Calculate arrow vector along channel
+                    // Calculate vector from current to next point
                     var dx = nextLatLng[1] - latLng[1];  // Longitude difference
                     var dy = nextLatLng[0] - latLng[0];  // Latitude difference
                     var dist = Math.sqrt(dx*dx + dy*dy);
                     
                     if (dist < 0.0001) continue;
                     
-                    // Calculate angle from the actual direction between points
-                    // atan2(dy, dx) gives angle from east, then convert to degrees
+                    // Calculate angle - arrow points in direction of vector
                     var angle = Math.atan2(dy, dx) * 180 / Math.PI;
                     
-                    // Arrow size based on velocity
-                    var arrowSize = Math.min(Math.abs(uVal) * 10, 15);
-                    arrowSize = Math.max(arrowSize, 8);
+                    // Arrow size based on velocity - smaller than before
+                    var arrowSize = Math.min(Math.abs(uVal) * 6, 10);
+                    arrowSize = Math.max(arrowSize, 5);
                     
                     var arrowIcon = L.divIcon({
                         className: 'velocity-arrow',
