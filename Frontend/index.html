@@ -2340,7 +2340,7 @@
                         direction = uVal > 0 ? -1 : 1;  // Flood inland, Ebb seaward
                     }
                     
-                    var lookAhead = Math.min(5, Math.floor(coords.length / 20)); // Look several points ahead
+                    var lookAhead = Math.min(2, Math.floor(coords.length / 50)); // Look fewer points ahead to follow curves
                     var nextIndex = pointIndex + (direction * lookAhead);
                     nextIndex = Math.max(0, Math.min(nextIndex, coords.length - 1));
                     
@@ -2349,34 +2349,28 @@
                     var nextLatLng = coords[nextIndex];
                     
                     // Calculate arrow vector along channel
-                    var dx = nextLatLng[1] - latLng[1];
-                    var dy = nextLatLng[0] - latLng[0];
+                    var dx = nextLatLng[1] - latLng[1];  // Longitude difference
+                    var dy = nextLatLng[0] - latLng[0];  // Latitude difference
                     var dist = Math.sqrt(dx*dx + dy*dy);
                     
                     if (dist < 0.0001) continue;
                     
-                    // Normalize and scale - make arrows smaller and more subtle
-                    dx = dx / dist * arrowLength;
-                    dy = dy / dist * arrowLength;
+                    // Calculate angle from the actual direction between points
+                    // atan2(dy, dx) gives angle from east, then convert to degrees
+                    var angle = Math.atan2(dy, dx) * 180 / Math.PI;
                     
-                    var endLat = latLng[0] + dy;
-                    var endLng = latLng[1] + dx;
-                    
-                    // Bigger arrow for better visibility
-                    var arrowSize = Math.min(Math.abs(uVal) * 8, 12); // Increased from 3 to 8
-                    arrowSize = Math.max(arrowSize, 6); // Minimum size of 6px
-                    var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
-                    
-                    console.log('Creating arrow at', latLng, 'size:', arrowSize, 'angle:', angle, 'color:', arrowColor);
+                    // Arrow size based on velocity
+                    var arrowSize = Math.min(Math.abs(uVal) * 10, 15);
+                    arrowSize = Math.max(arrowSize, 8);
                     
                     var arrowIcon = L.divIcon({
                         className: 'velocity-arrow',
-                        html: '<div style="width: 0; height: 0; border-left: ' + arrowSize + 'px solid transparent; border-right: ' + arrowSize + 'px solid transparent; border-bottom: ' + (arrowSize * 1.8) + 'px solid ' + arrowColor + '; transform: rotate(' + angle + 'deg); filter: drop-shadow(0 0 3px rgba(0,0,0,0.5));"></div>',
+                        html: '<div style="width: 0; height: 0; border-left: ' + arrowSize + 'px solid transparent; border-right: ' + arrowSize + 'px solid transparent; border-bottom: ' + (arrowSize * 2) + 'px solid ' + arrowColor + '; transform: rotate(' + angle + 'deg); transform-origin: center;"></div>',
                         iconSize: [arrowSize * 2, arrowSize * 2],
-                        iconAnchor: [arrowSize, arrowSize * 1.5]
+                        iconAnchor: [arrowSize, arrowSize]  // Center the arrow
                     });
                     
-                    var arrowMarker = L.marker([endLat, endLng], {
+                    var arrowMarker = L.marker([latLng[0], latLng[1]], {
                         icon: arrowIcon,
                         opacity: 0.9, // More opaque
                         zIndexOffset: 1000 // Ensure arrows appear on top
