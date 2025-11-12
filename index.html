@@ -10,6 +10,81 @@
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e27; color: #fff; overflow: hidden; }
         #map { width: 100%; height: 100vh; }
         
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .control-panel {
+                max-width: 90vw !important;
+                max-height: 70vh !important;
+                font-size: 14px;
+                padding: 15px !important;
+                left: 5vw !important;
+                top: 10px !important;
+            }
+            
+            .control-panel h2 {
+                font-size: 18px !important;
+            }
+            
+            .control-section h3 {
+                font-size: 12px !important;
+            }
+            
+            .scenario-buttons {
+                grid-template-columns: 1fr !important;
+            }
+            
+            .results-panel {
+                max-width: 90vw !important;
+                right: 5vw !important;
+                font-size: 12px;
+                padding: 12px !important;
+            }
+            
+            .animation-panel {
+                max-width: 90vw !important;
+                bottom: 10px !important;
+                left: 5vw !important;
+                padding: 12px !important;
+            }
+            
+            .legend {
+                font-size: 11px;
+                padding: 10px !important;
+                max-width: 150px !important;
+            }
+            
+            .amplitude-graph {
+                width: 95vw !important;
+                max-width: 95vw !important;
+                left: 2.5vw !important;
+                padding: 15px !important;
+            }
+            
+            #amplitudeCanvas, #velocityCanvas {
+                max-width: 100%;
+                height: auto !important;
+            }
+            
+            .view-graph-btn, .run-button, .animation-btn {
+                font-size: 12px !important;
+                padding: 8px 12px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .control-panel {
+                font-size: 12px;
+            }
+            
+            .slider-label {
+                font-size: 11px !important;
+            }
+            
+            input[type="range"] {
+                height: 6px !important;
+            }
+        }
+        
         .control-panel { 
             position: absolute; 
             top: 20px; 
