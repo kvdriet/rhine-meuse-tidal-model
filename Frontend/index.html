@@ -881,7 +881,7 @@
                 
                 var results = await response.json();
                 displayResults(results);
-                visualizeOnMap(results);
+                // visualizeOnMap(results); // Don't apply colors immediately - keep neutral gray until animation
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -2264,10 +2264,27 @@
                 
                 console.log('Processing channel:', chName, 'points:', channelData.length);
                 
-                // Sample every Nth point to avoid cluttering
-                var skipPoints = Math.max(5, Math.floor(channelData.length / 10));
+                // Sample points near where tide enters each channel
+                // Ocean channels: tide enters at low index (ocean boundary)
+                // River/middle channels: tide enters at high index (upstream boundary)
+                var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
+                var isOceanChannel = oceanChannels.includes(chName);
                 
-                for (var i = 0; i < channelData.length; i += skipPoints) {
+                // Show arrows in first/last 30% of channel where tide enters
+                var startIdx, endIdx;
+                if (isOceanChannel) {
+                    // Ocean channels: arrows at ocean end (low index)
+                    startIdx = 0;
+                    endIdx = Math.floor(channelData.length * 0.3);
+                } else {
+                    // River/middle channels: arrows at upstream end (high index)
+                    startIdx = Math.floor(channelData.length * 0.7);
+                    endIdx = channelData.length;
+                }
+                
+                var skipPoints = Math.max(3, Math.floor((endIdx - startIdx) / 8));
+                
+                for (var i = startIdx; i < endIdx; i += skipPoints) {
                     var point = channelData[i];
                     
                     // Get velocity
