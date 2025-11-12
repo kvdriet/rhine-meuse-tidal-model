@@ -2264,27 +2264,28 @@
                 
                 console.log('Processing channel:', chName, 'points:', channelData.length);
                 
-                // Sample points near where tide enters each channel
-                // Ocean channels: tide enters at low index (ocean boundary)
-                // River/middle channels: tide enters at high index (upstream boundary)
+                // Model x-axis is reversed: ocean at high-x, but we want visualization ocean-first
+                // So we need to reverse the drawing order for ocean channels
                 var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
                 var isOceanChannel = oceanChannels.includes(chName);
                 
-                // Show arrows in first/last 30% of channel where tide enters
-                var startIdx, endIdx;
-                if (isOceanChannel) {
-                    // Ocean channels: arrows at ocean end (low index)
-                    startIdx = 0;
-                    endIdx = Math.floor(channelData.length * 0.3);
-                } else {
-                    // River/middle channels: arrows at upstream end (high index)
-                    startIdx = Math.floor(channelData.length * 0.7);
-                    endIdx = channelData.length;
+                // Sample every Nth point to avoid cluttering
+                var skipPoints = Math.max(5, Math.floor(channelData.length / 10));
+                
+                // Create array of indices to iterate
+                var indices = [];
+                for (var idx = 0; idx < channelData.length; idx += skipPoints) {
+                    indices.push(idx);
                 }
                 
-                var skipPoints = Math.max(3, Math.floor((endIdx - startIdx) / 8));
+                // For ocean channels: reverse the indices so animation goes ocean->river (reversed x)
+                if (isOceanChannel) {
+                    indices = indices.reverse();
+                }
                 
-                for (var i = startIdx; i < endIdx; i += skipPoints) {
+                // Draw arrows in correct order
+                for (var idx_i = 0; idx_i < indices.length; idx_i++) {
+                    var i = indices[idx_i];
                     var point = channelData[i];
                     
                     // Get velocity
