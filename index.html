@@ -2256,7 +2256,18 @@
             var vectorCount = 0;
             
             channelNames.forEach(function(chName) {
-                var channelData = currentResults.channels[chName];
+                // Get data for the selected tidal component
+                var channelData;
+                if (currentTidalComponent === 'm4' && currentResults.m4_data && currentResults.m4_data[chName]) {
+                    channelData = currentResults.m4_data[chName];
+                } else if (currentTidalComponent === 'ratio') {
+                    // For ratio, use M2 data (or could combine both)
+                    channelData = currentResults.channels[chName];
+                } else {
+                    // M2 component (default)
+                    channelData = currentResults.channels[chName];
+                }
+                
                 if (!channelData) {
                     console.log('No data for channel:', chName);
                     return;
@@ -2323,16 +2334,31 @@
                     var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
                     var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Use circles instead of arrows - much simpler!
-                    // Circle size based on velocity magnitude
-                    var circleRadius = Math.min(Math.abs(uVal) * 4, 8);
-                    circleRadius = Math.max(circleRadius, 3);
+                    // Use directional dashes - simple and shows flow direction
+                    // Get adjacent points for line direction
+                    var prevIndex = Math.max(0, pointIndex - 1);
+                    var nextIndex = Math.min(coords.length - 1, pointIndex + 1);
+                    
+                    if (prevIndex === nextIndex) continue;
+                    
+                    var prevLatLng = coords[prevIndex];
+                    var nextLatLng = coords[nextIndex];
+                    
+                    // Calculate line angle
+                    var dx = nextLatLng[1] - prevLatLng[1];
+                    var dy = nextLatLng[0] - prevLatLng[0];
+                    var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    
+                    // Dash size based on velocity
+                    var dashLength = Math.min(Math.abs(uVal) * 15, 25);
+                    dashLength = Math.max(dashLength, 12);
+                    var dashWidth = 3;
                     
                     var circleIcon = L.divIcon({
-                        className: 'velocity-circle',
-                        html: '<div style="width: ' + (circleRadius * 2) + 'px; height: ' + (circleRadius * 2) + 'px; background-color: ' + arrowColor + '; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>',
-                        iconSize: [circleRadius * 2, circleRadius * 2],
-                        iconAnchor: [circleRadius, circleRadius]  // Center the circle
+                        className: 'velocity-dash',
+                        html: '<div style="width: ' + dashLength + 'px; height: ' + dashWidth + 'px; background-color: ' + arrowColor + '; border-radius: 2px; box-shadow: 0 0 3px rgba(0,0,0,0.6); transform: rotate(' + angle + 'deg); transform-origin: center;"></div>',
+                        iconSize: [dashLength, dashWidth],
+                        iconAnchor: [dashLength / 2, dashWidth / 2]
                     });
                     
                     var arrowMarker = L.marker([latLng[0], latLng[1]], {
