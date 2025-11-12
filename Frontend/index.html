@@ -735,12 +735,7 @@
                 </label>
             </div>
         </div>
-        <div class="speed-control" style="margin-top: 15px;">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="showVelocityVectors" onchange="toggleVelocityVectors(this.checked)">
-                <span style="font-size: 13px;">Show Velocity Vectors</span>
-            </label>
-        </div>
+        <!-- Velocity vectors removed -->
         <div class="color-legend">
             <label style="color: #cbd5e1; font-size: 13px; margin-bottom: 8px; display: block;" id="colorLegendLabel">M₂ Elevation:</label>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -2576,9 +2571,7 @@
             });
             
             // Draw velocity vectors if enabled
-            if (showVelocityVectors) {
-                drawVelocityVectors(frameIndex);
-            }
+            // Velocity vectors removed
         }
         
         // RdBu_r colormap (Red-Blue reversed: high=red, low=blue)
