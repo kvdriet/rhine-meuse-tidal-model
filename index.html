@@ -2323,11 +2323,22 @@
                     var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
                     var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
                     
-                    // Arrow direction: positive u = flood (towards inland), negative u = ebb (towards ocean)
-                    // Since we reversed coordinate mapping, we need to flip the direction logic
-                    // Positive u (flood) should point AWAY from ocean (negative in coord space)
-                    // Negative u (ebb) should point TOWARDS ocean (positive in coord space)
-                    var direction = uVal > 0 ? -1 : 1;  // Flood = inland (negative), Ebb = ocean (positive)
+                    // Arrow direction depends on channel type and flow direction
+                    var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
+                    var middleChannels = ['nieuwe_maas', 'nieuwe_merwede', 'oude_maas'];
+                    var needsFlip = ['waal']; // First river channel needs flip
+                    
+                    var direction;
+                    if (oceanChannels.includes(chName)) {
+                        // Ocean channels: correct as is
+                        direction = uVal > 0 ? -1 : 1;  // Flood inland, Ebb seaward
+                    } else if (middleChannels.includes(chName) || needsFlip.includes(chName)) {
+                        // Middle channels and Waal: flip the direction
+                        direction = uVal > 0 ? 1 : -1;  // Flip for these channels
+                    } else {
+                        // Haringvliet: correct as is
+                        direction = uVal > 0 ? -1 : 1;  // Flood inland, Ebb seaward
+                    }
                     
                     var lookAhead = Math.min(5, Math.floor(coords.length / 20)); // Look several points ahead
                     var nextIndex = pointIndex + (direction * lookAhead);
