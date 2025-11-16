@@ -881,7 +881,7 @@
         
         var map, channelLayers = [];
         var velocityVectorLayer = null;
-        var showVelocityVectors = false;
+        // Velocity vectors always shown during animation
         var kmlData = {
             nieuwewaterweg: [[51.97316,4.12693],[51.96862,4.13491],[51.96462,4.14227],[51.96080,4.15245],[51.95522,4.16379],[51.94896,4.17568],[51.94373,4.18757],[51.93833,4.20143],[51.93346,4.21331],[51.92788,4.22519],[51.92126,4.23057],[51.91707,4.23509],[51.91306,4.24555],[51.90958,4.25600],[51.90505,4.26673],[51.90157,4.27749],[51.89913,4.28850],[51.89722,4.30009],[51.89426,4.31365],[51.89218,4.32177]],
             hartelkanaal: [[51.93985,4.08370],[51.93901,4.09486],[51.93807,4.10328],[51.93685,4.11273],[51.93545,4.12188],[51.93422,4.13075],[51.93328,4.14144],[51.93206,4.15028],[51.93018,4.15807],[51.92764,4.16585],[51.92529,4.16982],[51.92247,4.17195],[51.91917,4.17623],[51.91531,4.18339],[51.91353,4.18720],[51.91071,4.19315],[51.90760,4.20092],[51.90549,4.20499],[51.90352,4.20862],[51.90187,4.21233],[51.89920,4.21716],[51.89680,4.22019],[51.89473,4.22337],[51.89234,4.22518],[51.88967,4.22751],[51.88579,4.23053],[51.88318,4.23174],[51.87998,4.23329],[51.87753,4.23519],[51.87455,4.23821],[51.87269,4.24184],[51.87120,4.24589],[51.86986,4.25037],[51.86843,4.25443],[51.86720,4.25797],[51.86630,4.26159],[51.86544,4.26694],[51.86539,4.27220],[51.86582,4.27745],[51.86582,4.28228],[51.86598,4.28668],[51.86582,4.29185],[51.86544,4.29755],[51.86544,4.30195],[51.86571,4.30738],[51.86576,4.31144],[51.86566,4.31652],[51.86592,4.32212],[51.86619,4.32834],[51.86618,4.33442]],
@@ -2426,8 +2426,7 @@
 
         function drawVelocityVectors(frameIndex) {
             console.log('drawVelocityVectors called, frame:', frameIndex);
-            if (!showVelocityVectors || !currentResults) {
-                console.log('Skipping vectors - showVelocityVectors:', showVelocityVectors, 'currentResults:', !!currentResults);
+            if (!currentResults) {
                 return;
             }
             
@@ -2528,9 +2527,10 @@
                     var chevron = uVal > 0 ? '❯' : '❮';  // Unicode chevrons
                     var chevronColor = uVal > 0 ? '#3b82f6' : '#ef4444';
                     
-                    // Size based on velocity
-                    var fontSize = Math.min(Math.abs(uVal) * 25, 20);
-                    fontSize = Math.max(fontSize, 14);
+                    // Size based on tidal amplitude at this location
+                    var etaAmp = point.eta.amplitude;
+                    var fontSize = Math.min(etaAmp * 12, 22);
+                    fontSize = Math.max(fontSize, 12);
                     
                     var chevronIcon = L.divIcon({
                         className: 'velocity-chevron',
