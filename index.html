@@ -2425,154 +2425,11 @@
         }
 
         function drawVelocityVectors(frameIndex) {
-            // Only show velocity vectors for M2 (M4 doesn't have velocity data)
-            if (currentTidalComponent !== 'm2') {
-                if (velocityVectorLayer) {
-                    map.removeLayer(velocityVectorLayer);
-                    velocityVectorLayer = null;
-                }
-                return;
-            }
-            
-            if (!currentResults || !animationData) {
-                return;
-            }
-            
-            // Remove old vector layer
+            // Velocity vectors disabled
             if (velocityVectorLayer) {
                 map.removeLayer(velocityVectorLayer);
+                velocityVectorLayer = null;
             }
-            
-            velocityVectorLayer = L.layerGroup().addTo(map);
-            console.log('Created new velocity vector layer');
-            
-            var channelNames = ['nieuwe_waterweg', 'hartelkanaal', 'nieuwe_maas', 
-                               'nieuwe_merwede', 'oude_maas', 'waal', 'haringvliet'];
-            
-            var t = frameIndex / 60 * 2 * Math.PI; // Phase for this frame
-            console.log('Time phase:', t);
-            
-            var vectorCount = 0;
-            
-            channelNames.forEach(function(chName) {
-                // Get M2 data from currentResults (has velocity info)
-                if (!currentResults.channels || !currentResults.channels[chName]) {
-                    console.log('No channel data in currentResults for:', chName);
-                    return;
-                }
-                
-                var channelData = currentResults.channels[chName];
-                if (!channelData || channelData.length === 0) {
-                    console.log('Empty channel data for:', chName);
-                    return;
-                }
-                
-                console.log('Channel:', chName, 'has', channelData.length, 'points, first point:', channelData[0]);
-                
-                // Sample fewer points to avoid cluttering
-                var skipPoints = Math.max(8, Math.floor(channelData.length / 8));
-                
-                // Create array of indices to iterate
-                var indices = [];
-                for (var idx = 0; idx < channelData.length; idx += skipPoints) {
-                    indices.push(idx);
-                }
-                
-                // Reverse indices for ALL channels due to reversed x-axis
-                indices = indices.reverse();
-                
-                // Draw chevrons
-                for (var idx_i = 0; idx_i < indices.length; idx_i++) {
-                    var i = indices[idx_i];
-                    var point = channelData[i];
-                    
-                    // Check if velocity data exists
-                    if (!point || !point.velocity) {
-                        if (idx_i === 0) console.log('No velocity data for channel:', chName, 'point:', point);
-                        continue;
-                    }
-                    
-                    // Get velocity
-                    var velAmp = point.velocity.amplitude;
-                    var velPhase = point.velocity.phase;
-                    
-                    if (velAmp === undefined || velPhase === undefined) {
-                        if (idx_i === 0) console.log('Missing velocity amplitude/phase for:', chName);
-                        continue;
-                    }
-                    
-                    // Calculate instantaneous velocity
-                    var uVal = velAmp * Math.cos(t - velPhase);
-                    
-                    // Skip if velocity is too small
-                    if (Math.abs(uVal) < 0.08) continue;
-                    
-                    if (idx_i === 0 && vectorCount === 0) {
-                        console.log('Drawing chevron - channel:', chName, 'uVal:', uVal, 'velAmp:', velAmp);
-                    }
-                    
-                    // Find corresponding lat/lon on the channel
-                    var channelLayer = channelLayers.find(function(cl) {
-                        return channelMapping[cl.name] === chName;
-                    });
-                    
-                    if (!channelLayer) continue;
-                    
-                    var coords = channelLayer.data.coords;
-                    if (!coords || coords.length === 0) continue;
-                    
-                    // Get position along channel
-                    var pointIndex = Math.floor((i / channelData.length) * (coords.length - 1));
-                    
-                    // Reverse coordinate mapping for ALL channels
-                    pointIndex = (coords.length - 1) - pointIndex;
-                    pointIndex = Math.max(0, Math.min(pointIndex, coords.length - 1));
-                    var latLng = coords[pointIndex];
-                    
-                    // Get adjacent points for line direction
-                    var prevIndex = Math.max(0, pointIndex - 2);
-                    var nextIndex = Math.min(coords.length - 1, pointIndex + 2);
-                    
-                    if (prevIndex === nextIndex) continue;
-                    
-                    var prevLatLng = coords[prevIndex];
-                    var nextLatLng = coords[nextIndex];
-                    
-                    // Calculate line angle (direction of the channel)
-                    var dx = nextLatLng[1] - prevLatLng[1];
-                    var dy = nextLatLng[0] - prevLatLng[0];
-                    var lineAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-                    
-                    // Chevron direction based on velocity sign
-                    // Positive velocity (flood) = > pointing forward
-                    // Negative velocity (ebb) = < pointing backward  
-                    var chevron = uVal > 0 ? '›' : '‹';  // Simpler unicode chevrons
-                    var chevronColor = uVal > 0 ? '#3b82f6' : '#ef4444';
-                    
-                    // Size based on tidal amplitude at this location
-                    var etaAmp = point.eta.amplitude;
-                    var fontSize = Math.min(etaAmp * 12, 22);
-                    fontSize = Math.max(fontSize, 12);
-                    
-                    var chevronIcon = L.divIcon({
-                        className: 'velocity-chevron',
-                        html: '<div style="font-size: ' + fontSize + 'px; color: ' + chevronColor + '; font-weight: bold; text-shadow: 0 0 3px rgba(0,0,0,0.8), 0 0 2px white; transform: rotate(' + lineAngle + 'deg); line-height: 1; font-family: Arial, sans-serif;">' + chevron + '</div>',
-                        iconSize: [fontSize, fontSize],
-                        iconAnchor: [fontSize / 2, fontSize / 2]
-                    });
-                    
-                    var chevronMarker = L.marker([latLng[0], latLng[1]], {
-                        icon: chevronIcon,
-                        opacity: 0.95,
-                        zIndexOffset: 1000
-                    });
-                    
-                    velocityVectorLayer.addLayer(chevronMarker);
-                    vectorCount++;
-                }
-            });
-            
-            console.log('Total chevrons drawn:', vectorCount);
         }
         
         function updateVisualization(frameIndex) {
@@ -2782,5 +2639,106 @@
         // Initialize map
         setTimeout(initMap, 100);
     </script>
+
+        <!-- Info/Equations Panel -->
+        <div id="info-panel" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                    background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
+                    max-width: 800px; max-height: 80vh; overflow-y: auto; z-index: 2000;">
+            <button onclick="document.getElementById('info-panel').style.display='none'" 
+                    style="position: absolute; top: 10px; right: 10px; padding: 5px 10px; cursor: pointer; 
+                           background: #ef4444; color: white; border: none; border-radius: 5px;">✕</button>
+            
+            <h2 style="color: #1e40af; margin-top: 0;">Rhine-Meuse Estuary Model</h2>
+            <p style="margin-bottom: 20px;">This model simulates tidal dynamics in the Rhine-Meuse estuarine network based on a 2DV semi-analytical approach.</p>
+            
+            <h3 style="color: #1e40af; margin-top: 20px;">Governing Equations</h3>
+            
+            <h4 style="color: #3b82f6;">Momentum Equation</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                ∂u/∂t + u(∂u/∂x) + w(∂u/∂z) = -g(∂η/∂x) + A<sub>v</sub>(∂²u/∂z²)
+            </div>
+            <p style="font-size: 0.9em; color: #4b5563;">
+                Where:<br>
+                • u = horizontal velocity<br>
+                • w = vertical velocity<br>
+                • η = sea surface elevation<br>
+                • g = gravitational acceleration<br>
+                • A<sub>v</sub> = eddy viscosity<br>
+                • H = water depth
+            </p>
+            
+            <h4 style="color: #3b82f6; margin-top: 15px;">Continuity Equation</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                ∂u/∂x + ∂w/∂z + (1/l<sub>b</sub>)u = 0
+            </div>
+            <p style="font-size: 0.9em; color: #4b5563;">
+                Where l<sub>b</sub> is the convergence length scale of the channel width.
+            </p>
+            
+            <h4 style="color: #3b82f6; margin-top: 15px;">Depth-Integrated Continuity</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                ∂η/∂t + (∂/∂x + 1/l<sub>b</sub>) ∫<sub>-H</sub><sup>η</sup> u dz = 0
+            </div>
+            
+            <h3 style="color: #1e40af; margin-top: 20px;">Boundary Conditions</h3>
+            
+            <h4 style="color: #3b82f6;">At Surface (z = η)</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                A<sub>v</sub>(∂u/∂z) = 0  (no-stress condition)<br>
+                w = ∂η/∂t + u(∂η/∂x)  (kinematic condition)
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 15px;">At Bottom (z = -H)</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                A<sub>v</sub>(∂u/∂z) = τ<sub>b</sub>/ρ  (bottom stress)<br>
+                w = 0  (no vertical flow through bed)
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 15px;">Bottom Stress (Linearized)</h4>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: 'Courier New', monospace;">
+                τ<sub>b</sub> = ρs<sub>f</sub>u<sub>b</sub>
+            </div>
+            <p style="font-size: 0.9em; color: #4b5563;">
+                Where s<sub>f</sub> is the partial slip parameter and u<sub>b</sub> is velocity at the bed.
+            </p>
+            
+            <h3 style="color: #1e40af; margin-top: 20px;">Network Conditions</h3>
+            <p style="font-size: 0.9em; color: #4b5563;">
+                At vertex points (channel junctions):<br>
+                • η is continuous across all connecting channels<br>
+                • Mass is conserved: ΣB∫u dz = 0
+            </p>
+            
+            <h3 style="color: #1e40af; margin-top: 20px;">Key Features</h3>
+            <ul style="font-size: 0.9em; color: #4b5563; line-height: 1.6;">
+                <li><strong>M2 Component:</strong> Principal lunar semidiurnal tide (12.42 hour period)</li>
+                <li><strong>M4 Component:</strong> First harmonic overtide (6.21 hour period), generated internally through nonlinear processes</li>
+                <li><strong>Nonlinear Mechanisms:</strong> Advection, Stokes drift, and no-stress condition generate M4</li>
+                <li><strong>Tidal Asymmetry:</strong> Different flood vs. ebb durations and velocities</li>
+                <li><strong>2DV Model:</strong> Resolves vertical velocity structure in each channel</li>
+            </ul>
+            
+            <h3 style="color: #1e40af; margin-top: 20px;">Model Parameters</h3>
+            <p style="font-size: 0.9em; color: #4b5563;">
+                • Eddy viscosity: A<sub>v</sub> = 0.00144 × H (m²/s)<br>
+                • Partial slip: s<sub>f</sub> = 0.06555 m/s<br>
+                • M2 amplitude at sea: 0.8 m<br>
+                • M4 amplitude at sea: 0.2 m<br>
+                • River discharge: 850 m³/s
+            </p>
+            
+            <p style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 0.85em; color: #6b7280;">
+                Based on: van der Riet, K.A. (2022). Nonlinear tides and river flow of estuarine networks. 
+                MSc Thesis, Utrecht University.
+            </p>
+        </div>
+        
+        <button id="info-button" onclick="document.getElementById('info-panel').style.display='block'" 
+                style="position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; background: #1e40af; 
+                       color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; 
+                       box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 1500;">
+            ℹ️ Model Info & Equations
+        </button>
+
 </body>
 </html>
