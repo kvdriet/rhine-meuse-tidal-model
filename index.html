@@ -2465,15 +2465,8 @@
                     return;
                 }
                 
-                console.log('Processing channel:', chName, 'points:', channelData.length);
-                
-                // Model x-axis is reversed: ocean at high-x, but we want visualization ocean-first
-                // So we need to reverse the drawing order for ocean channels
-                var oceanChannels = ['nieuwe_waterweg', 'hartelkanaal'];
-                var isOceanChannel = oceanChannels.includes(chName);
-                
-                // Sample every Nth point to avoid cluttering
-                var skipPoints = Math.max(5, Math.floor(channelData.length / 10));
+                // Sample fewer points to avoid cluttering
+                var skipPoints = Math.max(8, Math.floor(channelData.length / 8));
                 
                 // Create array of indices to iterate
                 var indices = [];
@@ -2484,7 +2477,7 @@
                 // Reverse indices for ALL channels due to reversed x-axis
                 indices = indices.reverse();
                 
-                // Draw arrows in correct order
+                // Draw chevrons
                 for (var idx_i = 0; idx_i < indices.length; idx_i++) {
                     var i = indices[idx_i];
                     var point = channelData[i];
@@ -2497,74 +2490,64 @@
                     var uVal = velAmp * Math.cos(t - velPhase);
                     
                     // Skip if velocity is too small
-                    if (Math.abs(uVal) < 0.05) continue;
+                    if (Math.abs(uVal) < 0.08) continue;
                     
                     // Find corresponding lat/lon on the channel
                     var channelLayer = channelLayers.find(function(cl) {
                         return channelMapping[cl.name] === chName;
                     });
                     
-                    if (!channelLayer) {
-                        console.log('No channel layer found for:', chName);
-                        continue;
-                    }
+                    if (!channelLayer) continue;
                     
                     var coords = channelLayer.data.coords;
                     if (!coords || coords.length === 0) continue;
                     
                     // Get position along channel
-                    // Model x-axis is reversed for ALL channels: coords need to be reversed
                     var pointIndex = Math.floor((i / channelData.length) * (coords.length - 1));
                     
                     // Reverse coordinate mapping for ALL channels
                     pointIndex = (coords.length - 1) - pointIndex;
-                    
                     pointIndex = Math.max(0, Math.min(pointIndex, coords.length - 1));
                     var latLng = coords[pointIndex];
                     
-                    // Arrow properties - blue for high water (flood), red for low water (ebb)
-                    var arrowColor = uVal > 0 ? '#3b82f6' : '#ef4444'; // Blue=flood, Red=ebb
-                    var arrowLength = Math.min(Math.abs(uVal) * 0.0015, 0.01); // Smaller, more discrete
-                    
-                    // Use directional dashes - simple and shows flow direction
                     // Get adjacent points for line direction
-                    var prevIndex = Math.max(0, pointIndex - 1);
-                    var nextIndex = Math.min(coords.length - 1, pointIndex + 1);
+                    var prevIndex = Math.max(0, pointIndex - 2);
+                    var nextIndex = Math.min(coords.length - 1, pointIndex + 2);
                     
                     if (prevIndex === nextIndex) continue;
                     
                     var prevLatLng = coords[prevIndex];
                     var nextLatLng = coords[nextIndex];
                     
-                    // Calculate line angle
+                    // Calculate line angle (direction of the channel)
                     var dx = nextLatLng[1] - prevLatLng[1];
                     var dy = nextLatLng[0] - prevLatLng[0];
-                    var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    var lineAngle = Math.atan2(dy, dx) * 180 / Math.PI;
                     
-                    // Dash size based on velocity
-                    var dashLength = Math.min(Math.abs(uVal) * 15, 25);
-                    dashLength = Math.max(dashLength, 12);
-                    var dashWidth = 3;
+                    // Determine chevron direction: > for flood, < for ebb
+                    var chevron = uVal > 0 ? '❯' : '❮';  // Unicode chevrons
+                    var chevronColor = uVal > 0 ? '#3b82f6' : '#ef4444';
                     
-                    var circleIcon = L.divIcon({
-                        className: 'velocity-dash',
-                        html: '<div style="width: ' + dashLength + 'px; height: ' + dashWidth + 'px; background-color: ' + arrowColor + '; border-radius: 2px; box-shadow: 0 0 3px rgba(0,0,0,0.6); transform: rotate(' + angle + 'deg); transform-origin: center;"></div>',
-                        iconSize: [dashLength, dashWidth],
-                        iconAnchor: [dashLength / 2, dashWidth / 2]
+                    // Size based on velocity
+                    var fontSize = Math.min(Math.abs(uVal) * 25, 20);
+                    fontSize = Math.max(fontSize, 14);
+                    
+                    var chevronIcon = L.divIcon({
+                        className: 'velocity-chevron',
+                        html: '<div style="font-size: ' + fontSize + 'px; color: ' + chevronColor + '; font-weight: bold; text-shadow: 0 0 3px rgba(0,0,0,0.8), 0 0 2px white; transform: rotate(' + lineAngle + 'deg); line-height: 1; font-family: Arial, sans-serif;">' + chevron + '</div>',
+                        iconSize: [fontSize, fontSize],
+                        iconAnchor: [fontSize / 2, fontSize / 2]
                     });
                     
-                    var arrowMarker = L.marker([latLng[0], latLng[1]], {
-                        icon: circleIcon,
-                        opacity: 0.9, // More opaque
-                        zIndexOffset: 1000 // Ensure arrows appear on top
-                    }).bindPopup('<strong>' + chName.replace(/_/g, ' ').toUpperCase() + '</strong><br>Velocity: ' + uVal.toFixed(3) + ' m/s<br>' + (uVal > 0 ? '🔵 Flood (upstream)' : '🔴 Ebb (downstream)'));
+                    var chevronMarker = L.marker([latLng[0], latLng[1]], {
+                        icon: chevronIcon,
+                        opacity: 0.95,
+                        zIndexOffset: 1000
+                    });
                     
-                    velocityVectorLayer.addLayer(arrowMarker);
-                    vectorCount++;
+                    velocityVectorLayer.addLayer(chevronMarker);
                 }
             });
-            
-            console.log('Drew', vectorCount, 'velocity vectors');
         }
         
         function updateVisualization(frameIndex) {
