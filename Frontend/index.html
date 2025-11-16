@@ -2425,8 +2425,16 @@
         }
 
         function drawVelocityVectors(frameIndex) {
-            console.log('drawVelocityVectors called, frame:', frameIndex);
-            if (!currentResults) {
+            // Only show velocity vectors for M2 (M4 doesn't have velocity data)
+            if (currentTidalComponent !== 'm2') {
+                if (velocityVectorLayer) {
+                    map.removeLayer(velocityVectorLayer);
+                    velocityVectorLayer = null;
+                }
+                return;
+            }
+            
+            if (!currentResults || !animationData) {
                 return;
             }
             
@@ -2447,20 +2455,13 @@
             var vectorCount = 0;
             
             channelNames.forEach(function(chName) {
-                // Get data for the selected tidal component
-                var channelData;
-                if (currentTidalComponent === 'm4' && currentResults.m4_data && currentResults.m4_data[chName]) {
-                    channelData = currentResults.m4_data[chName];
-                } else if (currentTidalComponent === 'ratio') {
-                    // For ratio, use M2 data (or could combine both)
-                    channelData = currentResults.channels[chName];
-                } else {
-                    // M2 component (default)
-                    channelData = currentResults.channels[chName];
+                // Get M2 animation data (only component with velocity)
+                if (!animationData.data || !animationData.data[chName]) {
+                    return;
                 }
                 
-                if (!channelData) {
-                    console.log('No data for channel:', chName);
+                var channelData = animationData.data[chName].points;
+                if (!channelData || channelData.length === 0) {
                     return;
                 }
                 
@@ -2523,8 +2524,10 @@
                     var dy = nextLatLng[0] - prevLatLng[0];
                     var lineAngle = Math.atan2(dy, dx) * 180 / Math.PI;
                     
-                    // Determine chevron direction: > for flood, < for ebb
-                    var chevron = uVal > 0 ? '❯' : '❮';  // Unicode chevrons
+                    // Chevron direction based on velocity sign
+                    // Positive velocity (flood) = > pointing forward
+                    // Negative velocity (ebb) = < pointing backward  
+                    var chevron = uVal > 0 ? '›' : '‹';  // Simpler unicode chevrons
                     var chevronColor = uVal > 0 ? '#3b82f6' : '#ef4444';
                     
                     // Size based on tidal amplitude at this location
